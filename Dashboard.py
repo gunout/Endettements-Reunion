@@ -1,4 +1,4 @@
-# Dashboard.py - Version complète corrigée
+# Dashboard.py - Version avec analyse Dépenses/Recettes
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -195,11 +195,22 @@ with st.sidebar:
         selected_epci = st.multiselect(
             "EPCI (Intercommunalités)",
             options=epci_list,
-            default=epci_list[:3] if len(epci_list) > 3 else epci_list
+            default=epci_list
         )
     else:
         selected_epci = []
         st.warning("Colonne 'Nom_EPCI' non trouvée")
+    
+    # Filtre par commune
+    if 'Commune' in df.columns:
+        commune_list = sorted(df['Commune'].dropna().unique().tolist())
+        selected_communes = st.multiselect(
+            "Communes (24 communes)",
+            options=commune_list,
+            default=commune_list
+        )
+    else:
+        selected_communes = []
     
     # Filtre par type de budget
     if 'Type_budget' in df.columns:
@@ -218,7 +229,7 @@ with st.sidebar:
         selected_agregats = st.multiselect(
             "Indicateurs financiers",
             options=agregats,
-            default=['Epargne brute', 'Capacité ou besoin de financement', 'Impôts et taxes'] 
+            default=['Epargne brute', 'Capacité ou besoin de financement', 'Impôts et taxes', 'Recettes totales hors emprunts'] 
             if 'Epargne brute' in agregats else agregats[:3]
         )
     else:
@@ -237,6 +248,9 @@ filtered_df = df.copy()
 
 if selected_epci:
     filtered_df = filtered_df[filtered_df['Nom_EPCI'].isin(selected_epci)]
+
+if selected_communes:
+    filtered_df = filtered_df[filtered_df['Commune'].isin(selected_communes)]
 
 if selected_budget_types:
     filtered_df = filtered_df[filtered_df['Type_budget'].isin(selected_budget_types)]
@@ -293,12 +307,13 @@ try:
                 """, unsafe_allow_html=True)
         
         with col4:
-            if 'Nom_EPCI' in df_principal.columns:
-                epci_count = df_principal['Nom_EPCI'].nunique()
+            if 'Agregat' in df_principal.columns and 'Montant' in df_principal.columns:
+                df_recettes = df_principal[df_principal['Agregat'] == 'Recettes totales hors emprunts']
+                total_recettes = df_recettes['Montant'].sum() / 1_000_000 if not df_recettes.empty else 0
                 st.markdown(f"""
                 <div class="kpi-card">
-                    <div class="kpi-value">{epci_count}</div>
-                    <div class="kpi-label">EPCI représentées</div>
+                    <div class="kpi-value">{total_recettes:.1f} M€</div>
+                    <div class="kpi-label">Recettes totales</div>
                 </div>
                 """, unsafe_allow_html=True)
     else:
@@ -308,11 +323,12 @@ except Exception as e:
     st.error(f"Erreur dans le calcul des KPI : {str(e)}")
 
 # Onglets pour les différentes analyses
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "🏛️ Santé Financière",
     "📊 Comparaison EPCI",
     "💧 Budgets Annexes",
-    "💰 Focus Épargne"
+    "💰 Focus Épargne",
+    "📈 Analyse Dépenses/Recettes"
 ])
 
 # TAB 1: Santé Financière des Communes
@@ -416,7 +432,7 @@ with tab2:
             epci_data = []
             
             for epci in df_principal['Nom_EPCI'].dropna().unique():
-                df_epci = df_principal[df_principal['Nom_EPCI'] == epci]
+                df_epci = df_principal[df_epci['Nom_EPCI'] == epci]
                 
                 # Calcul des métriques de base
                 metrics = {
@@ -879,6 +895,376 @@ with tab4:
     except Exception as e:
         st.error(f"Erreur dans l'analyse de l'épargne brute : {str(e)}")
 
+# TAB 5: NOUVELLE ANALYSE DÉPENSES/RECETTES
+with tab5:
+    try:
+        st.markdown("### 📈 Analyse Dépenses vs Recettes - 24 Communes de La Réunion")
+        
+        # Vérifier que nous avons les données nécessaires
+        if 'Agregat' not in df_principal.columns or 'Montant' not in df_principal.columns:
+            st.warning("Données nécessaires pour l'analyse dépenses/recettes non disponibles")
+        else:
+            # 1. ANALYSE DES RECETTES
+            st.markdown("#### 1. Analyse des Recettes")
+            
+            # Récupérer les données de recettes
+            df_recettes = df_principal[df_principal['Agregat'] == 'Recettes totales hors emprunts']
+            
+            if not df_recettes.empty:
+                # A. Top 10 des communes par recettes
+                col_rec1, col_rec2 = st.columns(2)
+                
+                with col_rec1:
+                    df_top_recettes = df_recettes.sort_values('Montant', ascending=False).head(10)
+                    
+                    fig_rec1 = px.bar(
+                        df_top_recettes,
+                        x='Commune',
+                        y='Montant',
+                        title="Top 10 communes - Recettes totales",
+                        color='Montant',
+                        color_continuous_scale='Blues',
+                        text_auto='.2s'
+                    )
+                    fig_rec1.update_layout(
+                        xaxis_tickangle=45,
+                        yaxis_title="Recettes (€)",
+                        height=400
+                    )
+                    st.plotly_chart(fig_rec1, use_container_width=True)
+                
+                with col_rec2:
+                    # B. Recettes par habitant
+                    df_recettes_hab = df_recettes.dropna(subset=['Montant_par_habitant'])
+                    df_recettes_hab = df_recettes_hab.sort_values('Montant_par_habitant', ascending=False).head(10)
+                    
+                    fig_rec2 = px.bar(
+                        df_recettes_hab,
+                        x='Commune',
+                        y='Montant_par_habitant',
+                        title="Top 10 - Recettes par habitant",
+                        color='Montant_par_habitant',
+                        color_continuous_scale='Purples',
+                        text_auto='.0f'
+                    )
+                    fig_rec2.update_layout(
+                        xaxis_tickangle=45,
+                        yaxis_title="Recettes par habitant (€)",
+                        height=400
+                    )
+                    st.plotly_chart(fig_rec2, use_container_width=True)
+                
+                # Statistiques des recettes
+                st.markdown("##### 📊 Statistiques des recettes")
+                
+                col_stat_rec1, col_stat_rec2, col_stat_rec3 = st.columns(3)
+                
+                with col_stat_rec1:
+                    total_recettes = df_recettes['Montant'].sum() / 1_000_000
+                    st.metric("Recettes totales", f"{total_recettes:,.1f} M€")
+                
+                with col_stat_rec2:
+                    avg_recettes_hab = df_recettes['Montant_par_habitant'].mean()
+                    st.metric("Moyenne par habitant", f"{avg_recettes_hab:,.0f} €")
+                
+                with col_stat_rec3:
+                    max_recettes_commune = df_recettes.loc[df_recettes['Montant'].idxmax(), 'Commune'] if not df_recettes.empty else "N/A"
+                    max_recettes = df_recettes['Montant'].max() / 1_000_000 if not df_recettes.empty else 0
+                    st.metric("Commune avec plus de recettes", f"{max_recettes:.1f} M€", delta=max_recettes_commune)
+            
+            else:
+                st.info("Aucune donnée de recettes disponible")
+            
+            # 2. ANALYSE DES DÉPENSES (approximation via capacité de financement et épargne)
+            st.markdown("#### 2. Analyse des Dépenses")
+            
+            # Calcul approximatif des dépenses : Recettes - Épargne brute
+            df_epargne = df_principal[df_principal['Agregat'] == 'Epargne brute']
+            
+            if not df_recettes.empty and not df_epargne.empty:
+                # Créer un DataFrame combiné
+                depenses_data = []
+                
+                for commune in df_principal['Commune'].unique():
+                    recettes_commune = df_recettes[df_recettes['Commune'] == commune]
+                    epargne_commune = df_epargne[df_epargne['Commune'] == commune]
+                    
+                    if not recettes_commune.empty and not epargne_commune.empty:
+                        recettes = recettes_commune['Montant'].iloc[0]
+                        epargne = epargne_commune['Montant'].iloc[0]
+                        
+                        # Dépenses = Recettes - Épargne (approximation)
+                        depenses = recettes - epargne
+                        
+                        # Population pour calcul par habitant
+                        population = recettes_commune['Population'].iloc[0] if pd.notnull(recettes_commune['Population'].iloc[0]) else 0
+                        
+                        depenses_data.append({
+                            'Commune': commune,
+                            'Recettes': recettes,
+                            'Épargne': epargne,
+                            'Dépenses': depenses,
+                            'Population': population,
+                            'Dépenses_par_habitant': depenses / population if population > 0 else 0,
+                            'Taux_depenses_recettes': (depenses / recettes * 100) if recettes > 0 else 0
+                        })
+                
+                if depenses_data:
+                    df_depenses = pd.DataFrame(depenses_data)
+                    
+                    # A. Top 10 des communes par dépenses
+                    col_dep1, col_dep2 = st.columns(2)
+                    
+                    with col_dep1:
+                        df_top_depenses = df_depenses.sort_values('Dépenses', ascending=False).head(10)
+                        
+                        fig_dep1 = px.bar(
+                            df_top_depenses,
+                            x='Commune',
+                            y='Dépenses',
+                            title="Top 10 communes - Dépenses estimées",
+                            color='Dépenses',
+                            color_continuous_scale='Reds',
+                            text_auto='.2s'
+                        )
+                        fig_dep1.update_layout(
+                            xaxis_tickangle=45,
+                            yaxis_title="Dépenses (€)",
+                            height=400
+                        )
+                        st.plotly_chart(fig_dep1, use_container_width=True)
+                    
+                    with col_dep2:
+                        # B. Dépenses par habitant
+                        df_depenses_hab = df_depenses.sort_values('Dépenses_par_habitant', ascending=False).head(10)
+                        
+                        fig_dep2 = px.bar(
+                            df_depenses_hab,
+                            x='Commune',
+                            y='Dépenses_par_habitant',
+                            title="Top 10 - Dépenses par habitant",
+                            color='Dépenses_par_habitant',
+                            color_continuous_scale='Oranges',
+                            text_auto='.0f'
+                        )
+                        fig_dep2.update_layout(
+                            xaxis_tickangle=45,
+                            yaxis_title="Dépenses par habitant (€)",
+                            height=400
+                        )
+                        st.plotly_chart(fig_dep2, use_container_width=True)
+                    
+                    # Statistiques des dépenses
+                    st.markdown("##### 📊 Statistiques des dépenses")
+                    
+                    col_stat_dep1, col_stat_dep2, col_stat_dep3 = st.columns(3)
+                    
+                    with col_stat_dep1:
+                        total_depenses = df_depenses['Dépenses'].sum() / 1_000_000
+                        st.metric("Dépenses totales estimées", f"{total_depenses:,.1f} M€")
+                    
+                    with col_stat_dep2:
+                        avg_depenses_hab = df_depenses['Dépenses_par_habitant'].mean()
+                        st.metric("Moyenne dépenses/habitant", f"{avg_depenses_hab:,.0f} €")
+                    
+                    with col_stat_dep3:
+                        taux_moyen = df_depenses['Taux_depenses_recettes'].mean()
+                        st.metric("Taux dépenses/recettes moyen", f"{taux_moyen:.1f}%")
+                    
+                    # 3. COMPARAISON DÉPENSES VS RECETTES
+                    st.markdown("#### 3. Comparaison Dépenses vs Recettes")
+                    
+                    # Sélectionner les 15 communes avec les plus gros budgets
+                    df_comparison = df_depenses.sort_values('Recettes', ascending=False).head(15)
+                    
+                    # Graphique comparatif
+                    fig_comparison = go.Figure()
+                    
+                    fig_comparison.add_trace(go.Bar(
+                        x=df_comparison['Commune'],
+                        y=df_comparison['Recettes'],
+                        name='Recettes',
+                        marker_color='#3B82F6',
+                        text=df_comparison['Recettes'].apply(lambda x: f"{x/1_000_000:.1f}M"),
+                        textposition='outside'
+                    ))
+                    
+                    fig_comparison.add_trace(go.Bar(
+                        x=df_comparison['Commune'],
+                        y=df_comparison['Dépenses'],
+                        name='Dépenses',
+                        marker_color='#EF4444',
+                        text=df_comparison['Dépenses'].apply(lambda x: f"{x/1_000_000:.1f}M"),
+                        textposition='outside'
+                    ))
+                    
+                    fig_comparison.update_layout(
+                        title="Comparaison Recettes vs Dépenses (15 plus grosses communes)",
+                        barmode='group',
+                        height=500,
+                        xaxis_tickangle=45,
+                        yaxis_title="Montant (€)",
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                    )
+                    
+                    st.plotly_chart(fig_comparison, use_container_width=True)
+                    
+                    # 4. ANALYSE DU SOLDE (RECETTES - DÉPENSES)
+                    st.markdown("#### 4. Analyse du Solde (Recettes - Dépenses)")
+                    
+                    # Calcul du solde
+                    df_depenses['Solde'] = df_depenses['Recettes'] - df_depenses['Dépenses']
+                    df_depenses['Solde_par_habitant'] = df_depenses['Solde'] / df_depenses['Population']
+                    
+                    col_solde1, col_solde2 = st.columns(2)
+                    
+                    with col_solde1:
+                        # Communes avec solde positif
+                        df_solde_positif = df_depenses[df_depenses['Solde'] > 0].sort_values('Solde', ascending=False)
+                        
+                        if not df_solde_positif.empty:
+                            fig_solde1 = px.bar(
+                                df_solde_positif.head(10),
+                                x='Commune',
+                                y='Solde',
+                                title="Top 10 communes - Excédent (Recettes > Dépenses)",
+                                color='Solde',
+                                color_continuous_scale='Greens',
+                                text_auto='.2s'
+                            )
+                            fig_solde1.update_layout(
+                                xaxis_tickangle=45,
+                                yaxis_title="Excédent (€)",
+                                height=400
+                            )
+                            st.plotly_chart(fig_solde1, use_container_width=True)
+                    
+                    with col_solde2:
+                        # Communes avec solde négatif
+                        df_solde_negatif = df_depenses[df_depenses['Solde'] < 0].sort_values('Solde', ascending=True)
+                        
+                        if not df_solde_negatif.empty:
+                            fig_solde2 = px.bar(
+                                df_solde_negatif.head(10),
+                                x='Commune',
+                                y='Solde',
+                                title="Top 10 communes - Déficit (Dépenses > Recettes)",
+                                color='Solde',
+                                color_continuous_scale='Reds',
+                                text_auto='.2s'
+                            )
+                            fig_solde2.update_layout(
+                                xaxis_tickangle=45,
+                                yaxis_title="Déficit (€)",
+                                height=400
+                            )
+                            st.plotly_chart(fig_solde2, use_container_width=True)
+                    
+                    # 5. TABLEAU SYNTHÈSE DÉPENSES/RECETTES
+                    st.markdown("#### 5. Tableau synthèse - Toutes les communes")
+                    
+                    # Créer un tableau formaté
+                    df_synthese = df_depenses.copy()
+                    
+                    # Formater les colonnes
+                    df_synthese['Recettes'] = df_synthese['Recettes'].apply(
+                        lambda x: format_number_for_display(x, 1, True)
+                    )
+                    df_synthese['Dépenses'] = df_synthese['Dépenses'].apply(
+                        lambda x: format_number_for_display(x, 1, True)
+                    )
+                    df_synthese['Épargne'] = df_synthese['Épargne'].apply(
+                        lambda x: format_number_for_display(x, 1, True)
+                    )
+                    df_synthese['Solde'] = df_synthese['Solde'].apply(
+                        lambda x: format_number_for_display(x, 1, True)
+                    )
+                    df_synthese['Dépenses_par_habitant'] = df_synthese['Dépenses_par_habitant'].apply(
+                        lambda x: f"€{x:,.0f}"
+                    )
+                    df_synthese['Taux_depenses_recettes'] = df_synthese['Taux_depenses_recettes'].apply(
+                        lambda x: f"{x:.1f}%"
+                    )
+                    df_synthese['Population'] = df_synthese['Population'].apply(format_population)
+                    
+                    # Trier par recettes
+                    df_synthese = df_synthese.sort_values('Recettes', ascending=False)
+                    
+                    # Afficher le tableau
+                    st.dataframe(
+                        df_synthese[['Commune', 'Population', 'Recettes', 'Dépenses', 
+                                    'Épargne', 'Solde', 'Dépenses_par_habitant', 'Taux_depenses_recettes']],
+                        use_container_width=True,
+                        height=500
+                    )
+                    
+                    # 6. ANALYSE PAR HABITANT
+                    st.markdown("#### 6. Analyse par habitant")
+                    
+                    col_hab1, col_hab2 = st.columns(2)
+                    
+                    with col_hab1:
+                        # Recettes vs Dépenses par habitant
+                        df_hab_comparison = df_depenses.sort_values('Dépenses_par_habitant', ascending=False).head(15)
+                        
+                        fig_hab1 = go.Figure()
+                        
+                        fig_hab1.add_trace(go.Bar(
+                            x=df_hab_comparison['Commune'],
+                            y=df_hab_comparison['Dépenses_par_habitant'],
+                            name='Dépenses/habitant',
+                            marker_color='#EF4444'
+                        ))
+                        
+                        fig_hab1.add_trace(go.Bar(
+                            x=df_hab_comparison['Commune'],
+                            y=df_hab_comparison['Solde_par_habitant'],
+                            name='Solde/habitant',
+                            marker_color='#10B981'
+                        ))
+                        
+                        fig_hab1.update_layout(
+                            title="Dépenses et Solde par habitant (Top 15)",
+                            barmode='group',
+                            height=400,
+                            xaxis_tickangle=45,
+                            yaxis_title="€ par habitant",
+                            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                        )
+                        
+                        st.plotly_chart(fig_hab1, use_container_width=True)
+                    
+                    with col_hab2:
+                        # Nuage de points : Population vs Dépenses par habitant
+                        fig_hab2 = px.scatter(
+                            df_depenses,
+                            x='Population',
+                            y='Dépenses_par_habitant',
+                            size='Dépenses',
+                            color='Solde',
+                            hover_name='Commune',
+                            title="Dépenses par habitant vs Population",
+                            labels={
+                                'Population': 'Population',
+                                'Dépenses_par_habitant': 'Dépenses par habitant (€)',
+                                'Dépenses': 'Dépenses totales',
+                                'Solde': 'Solde'
+                            },
+                            color_continuous_scale='RdYlGn',
+                            size_max=30
+                        )
+                        
+                        fig_hab2.update_layout(height=400)
+                        st.plotly_chart(fig_hab2, use_container_width=True)
+                    
+            else:
+                st.info("Données insuffisantes pour l'analyse des dépenses")
+        
+    except Exception as e:
+        st.error(f"Erreur dans l'analyse dépenses/recettes : {str(e)}")
+        with st.expander("Détails de l'erreur"):
+            st.write(f"Erreur : {str(e)}")
+
 # Section d'export
 st.markdown("---")
 st.markdown("### 📥 Export des données")
@@ -912,7 +1298,7 @@ try:
             
             # Ajouter des métriques financières si disponibles
             if 'Agregat' in filtered_df.columns and 'Montant' in filtered_df.columns:
-                for agregat in ['Epargne brute', 'Capacité ou besoin de financement']:
+                for agregat in ['Epargne brute', 'Capacité ou besoin de financement', 'Recettes totales hors emprunts']:
                     df_agregat = filtered_df[filtered_df['Agregat'] == agregat]
                     if not df_agregat.empty:
                         total = df_agregat['Montant'].sum() / 1_000_000
@@ -937,6 +1323,6 @@ st.markdown("---")
 st.markdown("""
 <div style="text-align: center; color: #6B7280; font-size: 0.9rem;">
     <p>Dashboard créé avec Streamlit | Données OFGL 2017 | La Réunion</p>
-    <p>Analyse financière communale - Version 2.0</p>
+    <p>Analyse financière communale - Version 3.0 (avec analyse Dépenses/Recettes)</p>
 </div>
 """, unsafe_allow_html=True)
