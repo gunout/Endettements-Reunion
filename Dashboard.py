@@ -1,4 +1,4 @@
-# app.py
+# Dashboard.py - Version complète corrigée
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -47,8 +47,51 @@ st.markdown("""
         font-size: 0.9rem;
         color: #6B7280;
     }
+    .positive {
+        color: #10B981;
+    }
+    .negative {
+        color: #EF4444;
+    }
 </style>
 """, unsafe_allow_html=True)
+
+# Fonctions utilitaires pour le formatage
+def format_number_for_display(value, decimals=1, is_currency=False):
+    """
+    Formate un nombre pour l'affichage dans les tableaux (retourne une chaîne)
+    """
+    if pd.isna(value):
+        return "-"
+    
+    try:
+        value = float(value)
+    except:
+        return str(value)
+    
+    suffix = ""
+    if abs(value) >= 1_000_000_000:  # Milliard
+        value = value / 1_000_000_000
+        suffix = "Md"
+    elif abs(value) >= 1_000_000:  # Million
+        value = value / 1_000_000
+        suffix = "M"
+    elif abs(value) >= 1_000:  # Millier
+        value = value / 1_000
+        suffix = "K"
+    
+    if is_currency:
+        return f"€{value:,.{decimals}f}{suffix}"
+    else:
+        return f"{value:,.{decimals}f}{suffix}"
+
+def format_population(value):
+    """
+    Formate un nombre de population
+    """
+    if pd.isna(value):
+        return "-"
+    return f"{value:,.0f}"
 
 # Titre principal
 st.markdown('<h1 class="main-header">📊 Dashboard Financier des Communes de La Réunion</h1>', unsafe_allow_html=True)
@@ -132,9 +175,6 @@ def load_data():
     # Filtre pour La Réunion
     if 'Code_Departement' in df.columns:
         df = df[df['Code_Departement'] == 974]
-    
-    # Création d'un identifiant unique pour les lignes
-    df['id'] = range(len(df))
     
     return df
 
@@ -381,17 +421,20 @@ with tab2:
                 # Calcul des métriques de base
                 metrics = {
                     'EPCI': epci,
-                    'Nombre communes': df_epci['Commune'].nunique() if 'Commune' in df_epci.columns else 0,
-                    'Population totale': df_epci['Population'].sum() if 'Population' in df_epci.columns else 0
+                    'Nombre_communes': df_epci['Commune'].nunique() if 'Commune' in df_epci.columns else 0,
+                    'Population_totale': df_epci['Population'].sum() if 'Population' in df_epci.columns else 0
                 }
                 
                 # Ajout des indicateurs financiers
                 for agregat in ['Epargne brute', 'Capacité ou besoin de financement', 'Impôts et taxes']:
                     df_agregat = df_epci[df_epci['Agregat'] == agregat]
                     if not df_agregat.empty and 'Montant' in df_agregat.columns:
-                        metrics[f'{agregat} (M€)'] = df_agregat['Montant'].sum() / 1_000_000
+                        # Utiliser des nombres bruts pour les graphiques
+                        metrics[f'{agregat}_M€'] = df_agregat['Montant'].sum() / 1_000_000
+                        metrics[f'{agregat}_€'] = df_agregat['Montant'].sum()
                     else:
-                        metrics[f'{agregat} (M€)'] = 0
+                        metrics[f'{agregat}_M€'] = 0
+                        metrics[f'{agregat}_€'] = 0
                 
                 epci_data.append(metrics)
             
@@ -401,30 +444,56 @@ with tab2:
                 # Graphique 1: Épargne brute par EPCI
                 st.markdown("#### Épargne brute par EPCI")
                 
-                if 'Epargne brute (M€)' in epci_df.columns:
+                if 'Epargne brute_M€' in epci_df.columns:
+                    # Trier pour un meilleur affichage
+                    epci_df_sorted = epci_df.sort_values('Epargne brute_M€', ascending=True)
+                    
                     fig1 = px.bar(
-                        epci_df.sort_values('Epargne brute (M€)', ascending=False),
-                        x='EPCI',
-                        y='Epargne brute (M€)',
+                        epci_df_sorted,
+                        x='Epargne brute_M€',
+                        y='EPCI',
+                        orientation='h',
                         title="Épargne brute totale par EPCI (en millions d'€)",
-                        color='Epargne brute (M€)',
-                        color_continuous_scale='Blues'
+                        color='Epargne brute_M€',
+                        color_continuous_scale='Blues',
+                        text='Epargne brute_M€'
                     )
-                    fig1.update_layout(xaxis_tickangle=45, height=400)
+                    fig1.update_traces(
+                        texttemplate='%{text:.1f} M€',
+                        textposition='outside'
+                    )
+                    fig1.update_layout(
+                        height=400,
+                        xaxis_title="Montant (M€)",
+                        yaxis_title="EPCI"
+                    )
                     st.plotly_chart(fig1, use_container_width=True)
                 
                 # Graphique 2: Capacité de financement
                 st.markdown("#### Capacité/Besoin de financement par EPCI")
                 
-                if 'Capacité ou besoin de financement (M€)' in epci_df.columns:
+                if 'Capacité ou besoin de financement_M€' in epci_df.columns:
+                    # Trier par valeur
+                    epci_df_sorted_fin = epci_df.sort_values('Capacité ou besoin de financement_M€', ascending=True)
+                    
                     # Déterminer la couleur en fonction du signe
-                    colors = ['#EF4444' if x < 0 else '#10B981' for x in epci_df['Capacité ou besoin de financement (M€)']]
+                    colors = []
+                    for val in epci_df_sorted_fin['Capacité ou besoin de financement_M€']:
+                        if val < 0:
+                            colors.append('#EF4444')  # Rouge pour les besoins
+                        elif val == 0:
+                            colors.append('#FBBF24')  # Jaune pour neutre
+                        else:
+                            colors.append('#10B981')  # Vert pour les capacités
                     
                     fig2 = go.Figure(data=[
                         go.Bar(
-                            x=epci_df['EPCI'],
-                            y=epci_df['Capacité ou besoin de financement (M€)'],
-                            marker_color=colors
+                            x=epci_df_sorted_fin['EPCI'],
+                            y=epci_df_sorted_fin['Capacité ou besoin de financement_M€'],
+                            marker_color=colors,
+                            text=epci_df_sorted_fin['Capacité ou besoin de financement_M€'],
+                            texttemplate='%{text:.1f}',
+                            textposition='outside'
                         )
                     ])
                     
@@ -432,43 +501,106 @@ with tab2:
                         title="Capacité (+) ou Besoin (-) de financement par EPCI (M€)",
                         xaxis_tickangle=45,
                         height=400,
-                        yaxis_title="Montant (M€)"
+                        yaxis_title="Montant (M€)",
+                        xaxis_title="EPCI"
                     )
                     st.plotly_chart(fig2, use_container_width=True)
                 
                 # Tableau de synthèse
                 st.markdown("#### Tableau comparatif")
                 
-                # Formater le tableau
-                display_cols = ['EPCI', 'Nombre communes', 'Population totale']
-                financial_cols = [col for col in epci_df.columns if '(M€)' in col]
-                display_cols.extend(financial_cols)
+                # Créer un DataFrame pour l'affichage (formaté pour l'utilisateur)
+                display_df = epci_df.copy()
                 
-                display_df = epci_df[display_cols].copy()
+                # Renommer les colonnes pour l'affichage
+                column_display_names = {
+                    'EPCI': 'EPCI',
+                    'Nombre_communes': 'Nb Communes',
+                    'Population_totale': 'Population',
+                    'Epargne brute_M€': 'Épargne brute (M€)',
+                    'Capacité ou besoin de financement_M€': 'Capacité/Besoin (M€)',
+                    'Impôts et taxes_M€': 'Impôts/Taxes (M€)'
+                }
                 
-                # Formater les nombres
-                def format_number(x):
-                    if isinstance(x, (int, float)):
-                        if abs(x) >= 1_000_000:
-                            return f"{x/1_000_000:.1f}M"
-                        elif abs(x) >= 1_000:
-                            return f"{x/1_000:.1f}K"
-                        else:
-                            return f"{x:.1f}"
-                    return x
+                # Sélectionner et renommer les colonnes disponibles
+                available_cols = {}
+                for internal_name, display_name in column_display_names.items():
+                    if internal_name in display_df.columns:
+                        available_cols[internal_name] = display_name
                 
-                for col in display_df.columns:
-                    if col not in ['EPCI']:
-                        display_df[col] = display_df[col].apply(format_number)
+                display_df = display_df[list(available_cols.keys())].copy()
+                display_df = display_df.rename(columns=available_cols)
                 
+                # Formater les nombres pour l'affichage
+                if 'Population' in display_df.columns:
+                    display_df['Population'] = display_df['Population'].apply(format_population)
+                
+                for col in ['Épargne brute (M€)', 'Capacité/Besoin (M€)', 'Impôts/Taxes (M€)']:
+                    if col in display_df.columns:
+                        display_df[col] = display_df[col].apply(
+                            lambda x: format_number_for_display(x, 1, True)
+                        )
+                
+                # Trier par épargne brute
+                if 'Épargne brute (M€)' in display_df.columns:
+                    # Extraire les valeurs numériques pour le tri
+                    try:
+                        display_df['_sort_key'] = display_df['Épargne brute (M€)'].str.replace('€', '').str.replace('M', '').str.replace('K', '').astype(float)
+                        # Ajuster pour les suffixes
+                        display_df['_sort_key'] = display_df.apply(
+                            lambda row: row['_sort_key'] * 1_000_000 if 'M' in str(row['Épargne brute (M€)']) else 
+                            (row['_sort_key'] * 1_000 if 'K' in str(row['Épargne brute (M€)']) else row['_sort_key']),
+                            axis=1
+                        )
+                        display_df = display_df.sort_values('_sort_key', ascending=False)
+                        display_df = display_df.drop('_sort_key', axis=1)
+                    except:
+                        # Si le tri échoue, trier alphabétiquement
+                        display_df = display_df.sort_values('EPCI')
+                
+                # Afficher le tableau
                 st.dataframe(
-                    display_df.style.background_gradient(
-                        subset=financial_cols,
-                        cmap='RdYlGn'
-                    ),
+                    display_df,
                     use_container_width=True,
                     height=400
                 )
+                
+                # Statistiques globales
+                st.markdown("#### 📊 Statistiques globales")
+                
+                col_stat1, col_stat2, col_stat3 = st.columns(3)
+                
+                with col_stat1:
+                    if 'Epargne brute_M€' in epci_df.columns:
+                        total_epargne = epci_df['Epargne brute_M€'].sum()
+                        st.metric(
+                            "Épargne brute totale",
+                            f"{total_epargne:,.1f} M€",
+                            delta=None
+                        )
+                
+                with col_stat2:
+                    if 'Capacité ou besoin de financement_M€' in epci_df.columns:
+                        # Nombre d'EPCI avec capacité positive
+                        positive_epci = (epci_df['Capacité ou besoin de financement_M€'] > 0).sum()
+                        total_epci = len(epci_df)
+                        percentage = (positive_epci / total_epci * 100) if total_epci > 0 else 0
+                        st.metric(
+                            "EPCI avec capacité positive",
+                            f"{percentage:.0f}%",
+                            delta=None
+                        )
+                
+                with col_stat3:
+                    if 'Population_totale' in epci_df.columns:
+                        total_pop = epci_df['Population_totale'].sum()
+                        avg_pop = epci_df['Population_totale'].mean()
+                        st.metric(
+                            "Population moyenne par EPCI",
+                            f"{avg_pop:,.0f}",
+                            delta=None
+                        )
+                        
             else:
                 st.info("Aucune donnée EPCI disponible")
         else:
@@ -496,7 +628,7 @@ with tab3:
                             return 'Eau'
                         elif 'assain' in libelle_lower:
                             return 'Assainissement'
-                        elif 'pompe' in libelle_lower and 'funèbre' in libelle_lower:
+                        elif 'pompe' in libelle_lower and ('funebre' in libelle_lower or 'funèbre' in libelle_lower):
                             return 'Pompes funèbres'
                         elif 'spanc' in libelle_lower:
                             return 'SPANC'
@@ -601,10 +733,14 @@ with tab3:
                         
                         with col_stat3:
                             if 'Eau' in pivot_df.columns and 'Assainissement' in pivot_df.columns:
-                                ratio_series = pivot_df['Eau'] / pivot_df['Assainissement'].replace(0, np.nan)
-                                avg_ratio = ratio_series.mean()
+                                # Éviter la division par zéro
+                                assain_values = pivot_df['Assainissement'].replace(0, np.nan)
+                                ratio_series = pivot_df['Eau'] / assain_values
+                                avg_ratio = ratio_series.mean(skipna=True)
                                 if pd.notnull(avg_ratio):
                                     st.metric("Ratio Eau/Assain moyen", f"{avg_ratio:.2f}")
+                                else:
+                                    st.metric("Ratio Eau/Assain moyen", "N/A")
             else:
                 st.info("Libellé des budgets annexes non disponible")
         else:
@@ -674,7 +810,7 @@ with tab4:
                 if 'Strate_population' in df_epargne.columns:
                     # Nettoyage de la strate
                     df_epargne_clean = df_epargne.dropna(subset=['Strate_population', 'Montant_par_habitant'])
-                    df_epargne_clean['Strate'] = df_epargne_clean['Strate_population'].astype(int).astype(str)
+                    df_epargne_clean['Strate'] = df_epargne_clean['Strate_population'].astype(str)
                     
                     if not df_epargne_clean.empty:
                         fig3 = px.box(
@@ -701,33 +837,37 @@ with tab4:
                 if available_cols:
                     display_df = df_epargne[available_cols].copy()
                     
-                    # Formater les nombres
-                    def format_currency(x):
-                        if pd.isnull(x):
-                            return "N/A"
-                        elif abs(x) >= 1_000_000:
-                            return f"€{x/1_000_000:.1f}M"
-                        elif abs(x) >= 1_000:
-                            return f"€{x/1_000:.0f}K"
-                        else:
-                            return f"€{x:.0f}"
-                    
+                    # Formater les nombres pour l'affichage
                     if 'Montant' in display_df.columns:
-                        display_df['Montant'] = display_df['Montant'].apply(format_currency)
+                        display_df['Montant'] = display_df['Montant'].apply(
+                            lambda x: format_number_for_display(x, 1, True)
+                        )
                     
                     if 'Montant_par_habitant' in display_df.columns:
                         display_df['Montant_par_habitant'] = display_df['Montant_par_habitant'].apply(
-                            lambda x: f"€{x:.0f}" if pd.notnull(x) else "N/A"
+                            lambda x: f"€{x:,.0f}" if pd.notnull(x) else "N/A"
                         )
                     
                     if 'Population' in display_df.columns:
                         display_df['Population'] = display_df['Population'].apply(
-                            lambda x: f"{x:,.0f}" if pd.notnull(x) else "N/A"
+                            lambda x: format_population(x)
                         )
                     
+                    # Trier
+                    sort_col = 'Montant_par_habitant' if 'Montant_par_habitant' in display_df.columns else 'Commune'
+                    try:
+                        if 'Montant_par_habitant' in display_df.columns:
+                            # Extraire les valeurs numériques pour le tri
+                            display_df['_sort_key'] = display_df['Montant_par_habitant'].str.replace('€', '').str.replace(',', '').astype(float)
+                            display_df = display_df.sort_values('_sort_key', ascending=False)
+                            display_df = display_df.drop('_sort_key', axis=1)
+                        else:
+                            display_df = display_df.sort_values('Commune')
+                    except:
+                        display_df = display_df.sort_values('Commune')
+                    
                     st.dataframe(
-                        display_df.sort_values('Montant_par_habitant' if 'Montant_par_habitant' in display_df.columns else 'Commune', 
-                                              ascending=False),
+                        display_df,
                         use_container_width=True,
                         height=400
                     )
@@ -791,19 +931,6 @@ try:
             
 except Exception as e:
     st.warning(f"Export non disponible : {str(e)}")
-
-# Debug information (optionnel - à désactiver en production)
-with st.expander("🔍 Informations de débogage (développement)"):
-    st.write("**Colonnes disponibles :**")
-    st.write(list(df.columns))
-    
-    st.write("**Aperçu des données :**")
-    st.write(df.head())
-    
-    st.write("**Statistiques des colonnes numériques :**")
-    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-    if numeric_cols:
-        st.write(df[numeric_cols].describe())
 
 # Pied de page
 st.markdown("---")
