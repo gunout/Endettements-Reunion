@@ -88,7 +88,16 @@ class ReunionFinancialDashboard:
                         self.data = pd.read_csv(file_path, sep=';', encoding=encoding, low_memory=False)
                         if not self.data.empty:
                             st.success(f"✅ Fichier chargé avec succès! {len(self.data):,} lignes, {len(self.data.columns)} colonnes")
-                            st.info(f"📅 Plage temporelle: {self.data['Exercice'].min() if 'Exercice' in self.data.columns else 'N/A'} - {self.data['Exercice'].max() if 'Exercice' in self.data.columns else 'N/A'}")
+                            
+                            # Afficher toutes les colonnes pour debugging
+                            with st.expander("🔍 Voir toutes les colonnes disponibles", expanded=True):
+                                for i, col in enumerate(self.data.columns):
+                                    st.write(f"{i+1}. **{col}** - Type: {self.data[col].dtype}, Exemple: {str(self.data[col].iloc[0])[:50] if len(self.data) > 0 else 'N/A'}")
+                            
+                            # Vérifier les années
+                            if 'Exercice' in self.data.columns:
+                                years = sorted(self.data['Exercice'].dropna().unique())
+                                st.info(f"📅 Plage temporelle: {int(min(years))} - {int(max(years))} ({len(years)} années)")
                             break
                     except UnicodeDecodeError:
                         continue
@@ -115,65 +124,82 @@ class ReunionFinancialDashboard:
         if self.data.empty:
             return
         
-        with st.sidebar.expander("📊 Structure des données", expanded=False):
+        with st.sidebar.expander("📊 Structure des données", expanded=True):
             st.write(f"**📈 Lignes totales:** {len(self.data):,}")
             st.write(f"**📊 Colonnes totales:** {len(self.data.columns)}")
             
-            # Informations sur les années
-            if 'Exercice' in self.data.columns:
-                years = sorted(self.data['Exercice'].dropna().unique())
-                st.write(f"**📅 Années disponibles:** {len(years)}")
-                st.write(f"De {int(min(years))} à {int(max(years))}" if years else "N/A")
+            # Identifier automatiquement les colonnes clés
+            st.markdown("### 🔑 Colonnes identifiées:")
             
-            # Aperçu des données
-            st.write("**👁️ Aperçu des colonnes:**")
-            cols_df = pd.DataFrame({
-                'Colonne': self.data.columns,
-                'Type': self.data.dtypes.astype(str),
-                'Non-null': self.data.count().values,
-                '% Rempli': (self.data.count().values / len(self.data) * 100).round(1)
-            })
-            st.dataframe(cols_df.head(15), height=300, use_container_width=True)
+            # Colonne commune
+            commune_cols = [col for col in self.data.columns if any(x in str(col).lower() for x in ['commune', 'nom', 'libellé', 'libelle'])]
+            if commune_cols:
+                st.write(f"**🏘️ Colonne commune:** {commune_cols[0]}")
+                sample_communes = self.data[commune_cols[0]].dropna().unique()[:5]
+                st.write(f"Exemples: {', '.join(map(str, sample_communes))}")
             
-            if len(self.data.columns) > 15:
-                st.write(f"... et {len(self.data.columns) - 15} autres colonnes")
+            # Colonne année/exercice
+            year_cols = [col for col in self.data.columns if any(x in str(col).lower() for x in ['exercice', 'annee', 'année', 'year'])]
+            if year_cols:
+                st.write(f"**📅 Colonne année:** {year_cols[0]}")
+                years = sorted(self.data[year_cols[0]].dropna().unique())
+                st.write(f"Années: {', '.join(map(str, years[:5]))}{'...' if len(years) > 5 else ''}")
+            
+            # Colonne montant
+            montant_cols = [col for col in self.data.columns if any(x in str(col).lower() for x in ['montant', 'valeur', 'euros', '€'])]
+            if montant_cols:
+                st.write(f"**💰 Colonne montant:** {montant_cols[0]}")
+            
+            # Colonne agrégat/catégorie
+            agregat_cols = [col for col in self.data.columns if any(x in str(col).lower() for x in ['agrégat', 'agregat', 'categorie', 'catégorie', 'rubrique', 'compte'])]
+            if agregat_cols:
+                st.write(f"**📋 Colonne agrégat:** {agregat_cols[0]}")
+                sample_agregats = self.data[agregat_cols[0]].dropna().unique()[:5]
+                st.write(f"Exemples: {', '.join(map(str, sample_agregats))}")
+            
+            # Colonne code INSEE
+            code_cols = [col for col in self.data.columns if 'insee' in str(col).lower() or 'code' in str(col).lower()]
+            if code_cols:
+                st.write(f"**🔢 Colonne code:** {code_cols[0]}")
     
     def prepare_financial_data(self):
         """Prépare les données financières pour analyse"""
         if self.data.empty:
             return
         
-        # Identifier les colonnes importantes
-        montant_col = None
-        agregat_col = None
-        commune_col = None
-        exercice_col = None
+        # Interface pour sélectionner manuellement les colonnes
+        st.sidebar.markdown("## 🔧 Configuration des colonnes")
         
-        for col in self.data.columns:
-            col_lower = str(col).lower()
-            if 'montant' in col_lower and montant_col is None:
-                montant_col = col
-            elif ('agrégat' in col_lower or 'agregat' in col_lower) and agregat_col is None:
-                agregat_col = col
-            elif 'commune' in col_lower and commune_col is None:
-                commune_col = col
-            elif 'exercice' in col_lower and exercice_col is None:
-                exercice_col = col
+        # Sélection manuelle des colonnes
+        all_columns = self.data.columns.tolist()
         
-        # Si certaines colonnes ne sont pas trouvées, utiliser les premières correspondantes
-        if not all([montant_col, agregat_col, commune_col, exercice_col]):
-            st.warning("⚠️ Certaines colonnes clés n'ont pas été trouvées automatiquement")
-            # Fallback: utiliser les premières colonnes de chaque type
-            montant_col = montant_col or self.data.columns[2] if len(self.data.columns) > 2 else None
-            agregat_col = agregat_col or self.data.columns[3] if len(self.data.columns) > 3 else None
-            commune_col = commune_col or self.data.columns[0] if len(self.data.columns) > 0 else None
-            exercice_col = exercice_col or self.data.columns[1] if len(self.data.columns) > 1 else None
+        commune_col = st.sidebar.selectbox(
+            "Sélectionnez la colonne des communes:",
+            all_columns,
+            index=next((i for i, col in enumerate(all_columns) if 'nom' in str(col).lower() and 'commune' in str(col).lower()), 0)
+        )
         
-        # Vérifier et préparer les données
-        required_cols = [montant_col, agregat_col, commune_col, exercice_col]
-        if all(required_cols):
+        exercice_col = st.sidebar.selectbox(
+            "Sélectionnez la colonne de l'exercice:",
+            all_columns,
+            index=next((i for i, col in enumerate(all_columns) if 'exercice' in str(col).lower()), 0)
+        )
+        
+        agregat_col = st.sidebar.selectbox(
+            "Sélectionnez la colonne de l'agrégat:",
+            all_columns,
+            index=next((i for i, col in enumerate(all_columns) if 'agrégat' in str(col).lower() or 'agregat' in str(col).lower()), 0)
+        )
+        
+        montant_col = st.sidebar.selectbox(
+            "Sélectionnez la colonne du montant:",
+            all_columns,
+            index=next((i for i, col in enumerate(all_columns) if 'montant' in str(col).lower()), 0)
+        )
+        
+        if st.sidebar.button("🚀 Préparer les données avec ces colonnes"):
             try:
-                # Nettoyer les données
+                # Nettoyer et préparer les données
                 financial_df = self.data[[commune_col, exercice_col, agregat_col, montant_col]].copy()
                 financial_df.columns = ['Commune', 'Exercice', 'Agregat', 'Montant']
                 
@@ -184,30 +210,72 @@ class ReunionFinancialDashboard:
                 financial_df['Commune'] = financial_df['Commune'].astype(str)
                 
                 # Filtrer pour La Réunion
-                financial_df = financial_df[financial_df['Commune'].str.contains('|'.join(self.reunion_communes), case=False, na=False)]
+                reunion_mask = financial_df['Commune'].str.contains('|'.join(self.reunion_communes), case=False, na=False)
+                financial_df = financial_df[reunion_mask].copy()
                 
-                # Créer des indicateurs financiers
-                self.create_financial_indicators(financial_df)
-                
+                if len(financial_df) > 0:
+                    # Nettoyer les noms de communes
+                    financial_df['Commune'] = financial_df['Commune'].apply(self.clean_commune_name)
+                    
+                    # Créer les indicateurs financiers
+                    self.create_financial_indicators(financial_df)
+                    
+                    st.sidebar.success(f"✅ Données préparées: {len(financial_df)} lignes")
+                    st.sidebar.info(f"🏘️ Communes trouvées: {len(financial_df['Commune'].unique())}")
+                    st.sidebar.info(f"📅 Années: {len(financial_df['Exercice'].unique())}")
+                    
+                    # Aperçu des données préparées
+                    with st.sidebar.expander("👁️ Aperçu des données préparées"):
+                        st.dataframe(financial_df.head(10))
+                else:
+                    st.sidebar.error("❌ Aucune donnée trouvée pour La Réunion")
+                    
             except Exception as e:
-                st.error(f"❌ Erreur lors de la préparation des données: {str(e)}")
+                st.sidebar.error(f"❌ Erreur: {str(e)}")
+    
+    def clean_commune_name(self, name):
+        """Nettoie le nom de la commune"""
+        if pd.isna(name):
+            return name
+        
+        name_str = str(name).strip()
+        
+        # Retirer les codes ou numéros
+        name_str = name_str.split(' - ')[-1]
+        name_str = name_str.split('(')[0].strip()
+        
+        # Standardiser les noms
+        for commune in self.reunion_communes:
+            if commune.lower() in name_str.lower():
+                return commune
+        
+        return name_str
     
     def create_financial_indicators(self, df):
         """Crée les indicateurs financiers agrégés par commune et année"""
         try:
-            # Pivoter les données pour avoir les agrégats en colonnes
-            pivot_df = df.pivot_table(
+            # Vérifier les colonnes nécessaires
+            required_cols = ['Commune', 'Exercice', 'Agregat', 'Montant']
+            if not all(col in df.columns for col in required_cols):
+                st.error("❌ Colonnes manquantes dans les données")
+                return
+            
+            # Grouper par commune, année et agrégat
+            grouped = df.groupby(['Commune', 'Exercice', 'Agregat'])['Montant'].sum().reset_index()
+            
+            # Pivoter pour avoir les agrégats en colonnes
+            pivot_df = grouped.pivot_table(
                 index=['Commune', 'Exercice'],
                 columns='Agregat',
                 values='Montant',
                 aggfunc='sum'
             ).reset_index()
             
-            # Remplacer les NaN par 0
+            # Remplir les valeurs manquantes avec 0
             pivot_df = pivot_df.fillna(0)
             
-            # Normaliser les noms des colonnes
-            pivot_df.columns = [str(col).strip() for col in pivot_df.columns]
+            # Réinitialiser les noms de colonnes
+            pivot_df.columns.name = None
             
             # Stocker les données annuelles
             self.annual_data = pivot_df
@@ -217,22 +285,47 @@ class ReunionFinancialDashboard:
             
             st.success(f"✅ Données financières préparées: {len(pivot_df)} enregistrements")
             
+            # Afficher un aperçu
+            with st.expander("📋 Aperçu des données agrégées"):
+                st.dataframe(pivot_df.head(20))
+            
         except Exception as e:
             st.error(f"❌ Erreur dans create_financial_indicators: {str(e)}")
+            import traceback
+            st.error(traceback.format_exc())
     
     def create_communes_config(self, df):
         """Crée la configuration des communes"""
         self.communes_config = {}
         
+        # Identifier les communes de La Réunion dans les données
+        communes_in_data = []
         for commune in df['Commune'].unique():
             if pd.isna(commune):
                 continue
                 
             commune_name = str(commune).strip()
             
-            # Données de cette commune
-            commune_data = df[df['Commune'] == commune_name]
+            # Vérifier si c'est une commune de La Réunion
+            for reunion_commune in self.reunion_communes:
+                if reunion_commune.lower() in commune_name.lower():
+                    communes_in_data.append(reunion_commune)
+                    break
+        
+        # Si pas de communes identifiées, utiliser toutes les communes uniques
+        if not communes_in_data:
+            communes_in_data = [str(c).strip() for c in df['Commune'].unique() if not pd.isna(c)]
+        
+        st.info(f"🏘️ {len(communes_in_data)} communes identifiées pour analyse")
+        
+        for commune in communes_in_data[:24]:  # Limiter aux 24 communes principales
+            # Filtrer les données de cette commune
+            commune_mask = df['Commune'].astype(str).str.contains(commune, case=False, na=False)
+            commune_data = df[commune_mask].copy()
             
+            if len(commune_data) == 0:
+                continue
+                
             # Obtenir les années disponibles
             years = sorted(commune_data['Exercice'].unique())
             
@@ -241,18 +334,27 @@ class ReunionFinancialDashboard:
             for year in years:
                 year_data = commune_data[commune_data['Exercice'] == year]
                 
-                # Extraire les indicateurs clés (en supposant certaines colonnes)
+                # Analyser les colonnes disponibles pour extraire les indicateurs
                 recettes = 0
                 depenses = 0
                 dette = 0
                 
+                # Chercher les colonnes qui pourraient contenir ces indicateurs
                 for col in year_data.columns:
-                    col_lower = str(col).lower()
-                    if 'recette' in col_lower and 'total' in col_lower:
-                        recettes = year_data[col].sum() / 1000000  # En millions
-                    elif 'dépense' in col_lower and 'total' in col_lower:
-                        depenses = year_data[col].sum() / 1000000  # En millions
-                    elif 'dette' in col_lower:
+                    col_str = str(col).lower()
+                    
+                    # Recettes
+                    if any(term in col_str for term in ['recette', 'revenu', 'produit']):
+                        if 'total' in col_str or 'ensemble' in col_str:
+                            recettes = year_data[col].sum() / 1000000  # En millions
+                    
+                    # Dépenses
+                    elif any(term in col_str for term in ['depense', 'charge', 'fonte']):
+                        if 'total' in col_str or 'ensemble' in col_str:
+                            depenses = year_data[col].sum() / 1000000  # En millions
+                    
+                    # Dette
+                    elif any(term in col_str for term in ['dette', 'emprunt', 'endettement']):
                         dette = year_data[col].sum() / 1000000  # En millions
                 
                 annual_stats[year] = {
@@ -264,13 +366,14 @@ class ReunionFinancialDashboard:
                 }
             
             # Configuration de la commune
-            self.communes_config[commune_name] = {
-                'nom': commune_name,
+            self.communes_config[commune] = {
+                'nom': commune,
                 'annees': years,
                 'stats_annuelles': annual_stats,
                 'derniere_annee': max(years) if years else None,
-                'type': self.get_commune_type(commune_name),
-                'couleur': self.get_commune_color(commune_name)
+                'type': self.get_commune_type(commune),
+                'couleur': self.get_commune_color(commune),
+                'data': commune_data
             }
     
     def get_commune_type(self, commune_name):
@@ -318,294 +421,236 @@ class ReunionFinancialDashboard:
         
         if not self.data.empty:
             st.markdown(f"""
-            **📊 {len(self.communes_config)} communes analysées • 📅 Données historiques • 🔍 Analyse temporelle complète**
+            **📊 {len(self.communes_config)} communes analysées • 📅 {len(self.data['Exercice'].unique()) if 'Exercice' in self.data.columns else 'N/A'} années • 🔍 {len(self.data):,} lignes de données**
             """)
     
-    def create_sidebar(self):
-        """Crée la sidebar avec tous les contrôles"""
-        with st.sidebar:
-            st.image("https://upload.wikimedia.org/wikipedia/commons/6/66/Flag_of_R%C3%A9union.svg", 
-                    width=200)
-            
-            if self.data.empty:
-                st.error("❌ Aucune donnée chargée")
-                st.info("Vérifiez que le fichier 'ofgl-base-communes.csv' est dans votre dépôt")
-                return None, None, []
-            
-            # Analyser la structure des données
-            self.analyze_data_structure()
-            
-            # Préparer les données financières
-            self.prepare_financial_data()
-            
-            if self.communes_config:
-                st.markdown("## 🔧 Paramètres d'analyse")
-                
-                # Sélection des années
-                st.markdown("### 📅 Sélection temporelle")
-                all_years = []
-                for commune in self.communes_config.values():
-                    all_years.extend(commune['annees'])
-                available_years = sorted(list(set(all_years)))
-                
-                if available_years:
-                    year_range = st.slider(
-                        "Période d'analyse",
-                        min_value=int(min(available_years)),
-                        max_value=int(max(available_years)),
-                        value=(int(min(available_years)), int(max(available_years)))
-                    )
-                else:
-                    year_range = (2017, 2023)
-                    st.warning("Aucune année trouvée, utilisation des valeurs par défaut")
-                
-                # Sélection de la commune principale
-                st.markdown("### 🏘️ Sélection des communes")
-                commune_options = sorted(list(self.communes_config.keys()))
-                
-                selected_commune = st.selectbox(
-                    "Commune principale:",
-                    commune_options,
-                    index=0 if 'Saint-Denis' in commune_options else 0
-                )
-                
-                # Sélection des communes à comparer
-                st.markdown("#### 🔄 Communes à comparer")
-                compare_communes = st.multiselect(
-                    "Sélectionnez jusqu'à 5 communes:",
-                    [c for c in commune_options if c != selected_commune],
-                    default=[],
-                    max_selections=5
-                )
-                
-                # Type d'analyse
-                st.markdown("#### 📈 Type d'analyse")
-                analysis_type = st.selectbox(
-                    "Mode d'analyse:",
-                    ["Analyse détaillée", "Comparaison multi-années", "Évolution temporelle", "Indicateurs clés"],
-                    index=0
-                )
-                
-                # Indicateurs à afficher
-                st.markdown("#### 📊 Indicateurs")
-                indicators = st.multiselect(
-                    "Indicateurs financiers:",
-                    ["Recettes", "Dépenses", "Dette", "Épargne", "Ratio Dette/Recettes"],
-                    default=["Recettes", "Dette", "Épargne"]
-                )
-                
-                return selected_commune, year_range, compare_communes, analysis_type, indicators
-            
-            return None, None, [], None, []
-    
     def create_overview_tab(self):
-        """Crée l'onglet Vue d'ensemble avec toutes les données"""
-        st.markdown("### 📊 Vue d'ensemble complète des 24 communes")
+        """Crée l'onglet Vue d'ensemble"""
+        st.markdown("### 📊 Vue d'ensemble des données")
         
-        if not self.communes_config:
-            st.warning("Aucune donnée de commune disponible")
+        if not self.data.empty:
+            # Afficher les premières lignes pour inspection
+            st.markdown("#### 🔍 Aperçu des données brutes")
+            st.dataframe(self.data.head(100), use_container_width=True, height=400)
+            
+            # Statistiques de base
+            st.markdown("#### 📈 Statistiques descriptives")
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.metric("Lignes totales", f"{len(self.data):,}")
+                numeric_cols = self.data.select_dtypes(include=[np.number]).columns
+                st.metric("Colonnes numériques", len(numeric_cols))
+            
+            with col2:
+                if 'Exercice' in self.data.columns:
+                    years = self.data['Exercice'].dropna().unique()
+                    st.metric("Années disponibles", len(years))
+                    st.metric("Plage temporelle", f"{int(min(years))}-{int(max(years))}")
+            
+            with col3:
+                # Compter les valeurs uniques pour les colonnes textuelles
+                text_cols = self.data.select_dtypes(include=['object']).columns
+                unique_counts = {}
+                for col in text_cols[:3]:  # Premières 3 colonnes textuelles
+                    unique_counts[col] = self.data[col].nunique()
+                
+                if unique_counts:
+                    st.metric("Valeurs uniques (premières colonnes)", "")
+                    for col, count in list(unique_counts.items())[:2]:
+                        st.write(f"  • {col[:20]}...: {count}")
+    
+    def create_analysis_tab(self):
+        """Crée l'onglet Analyse avec exploration des données"""
+        st.markdown("### 🔍 Exploration et analyse des données")
+        
+        if self.data.empty:
+            st.warning("Aucune donnée disponible")
             return
         
-        # Tableau récapitulatif avec TOUTES les données
-        overview_data = []
+        # Explorer les agrégats financiers disponibles
+        st.markdown("#### 📋 Agrégats financiers disponibles")
         
-        for commune_name, config in self.communes_config.items():
-            years = config['annees']
-            stats = config['stats_annuelles']
-            
-            if years and stats:
-                # Moyenne sur toutes les années
-                avg_recettes = np.mean([stats[y]['recettes'] for y in years if y in stats])
-                avg_dette = np.mean([stats[y]['dette'] for y in years if y in stats])
-                avg_epargne = np.mean([stats[y]['epargne'] for y in years if y in stats])
-                
-                # Dernière année disponible
-                last_year = max(years)
-                last_stats = stats.get(last_year, {})
-                
-                overview_data.append({
-                    'Commune': commune_name,
-                    'Type': config['type'].replace('_', ' ').title(),
-                    'Années': len(years),
-                    'Dernière année': last_year,
-                    'Recettes moy (M€)': round(avg_recettes, 1),
-                    'Dette moy (M€)': round(avg_dette, 1),
-                    'Épargne moy (M€)': round(avg_epargne, 1),
-                    'Recettes dernière année (M€)': round(last_stats.get('recettes', 0), 1),
-                    'Dette dernière année (M€)': round(last_stats.get('dette', 0), 1),
-                    'Ratio D/R': round(last_stats.get('ratio_dette_recettes', 0), 2)
-                })
+        # Trouver la colonne des agrégats
+        agregat_cols = [col for col in self.data.columns if any(x in str(col).lower() for x in ['agrégat', 'agregat', 'categorie', 'catégorie'])]
         
-        if overview_data:
-            df_overview = pd.DataFrame(overview_data)
+        if agregat_cols:
+            agregat_col = agregat_cols[0]
+            agregats = self.data[agregat_col].dropna().unique()
             
-            # Afficher TOUTES les données sans limite
-            st.markdown(f"#### 📋 Tableau complet ({len(df_overview)} communes)")
-            st.dataframe(
-                df_overview,
-                use_container_width=True,
-                height=600  # Hauteur fixe avec scroll
-            )
+            st.write(f"**{len(agregats)} types d'agrégats trouvés:**")
             
-            # Options d'export
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                if st.button("📥 Exporter en CSV"):
-                    csv = df_overview.to_csv(index=False, sep=';')
-                    st.download_button(
-                        label="Télécharger CSV",
-                        data=csv,
-                        file_name="communes_reunion_complet.csv",
-                        mime="text/csv"
-                    )
+            # Afficher les agrégats par catégorie
+            agregats_df = pd.DataFrame({'Agrégat': agregats})
+            agregats_df['Catégorie'] = agregats_df['Agrégat'].apply(self.categorize_aggregat)
             
-            # Graphiques de synthèse
-            st.markdown("#### 📈 Visualisations synthétiques")
+            # Compter par catégorie
+            category_counts = agregats_df['Catégorie'].value_counts()
             
             col1, col2 = st.columns(2)
             
             with col1:
-                # Top 10 par dette moyenne
-                top_dette = df_overview.sort_values('Dette moy (M€)', ascending=False).head(10)
-                fig = px.bar(top_dette,
-                            x='Commune', y='Dette moy (M€)',
-                            title='Top 10 - Dette moyenne (M€)',
-                            color='Type',
-                            color_discrete_sequence=px.colors.qualitative.Set3)
+                fig = px.bar(x=category_counts.index, y=category_counts.values,
+                            title="Répartition des agrégats par catégorie",
+                            labels={'x': 'Catégorie', 'y': 'Nombre'})
                 st.plotly_chart(fig, use_container_width=True)
             
             with col2:
-                # Top 10 par épargne moyenne
-                top_epargne = df_overview.sort_values('Épargne moy (M€)', ascending=False).head(10)
-                fig = px.bar(top_epargne,
-                            x='Commune', y='Épargne moy (M€)',
-                            title='Top 10 - Épargne moyenne (M€)',
-                            color='Type',
-                            color_discrete_sequence=px.colors.qualitative.Set2)
+                # Afficher les agrégats par catégorie
+                for category in category_counts.index:
+                    with st.expander(f"{category} ({category_counts[category]})"):
+                        category_agregats = agregats_df[agregats_df['Catégorie'] == category]['Agrégat'].tolist()
+                        for agregat in category_agregats[:20]:  # Limiter à 20 par catégorie
+                            st.write(f"• {agregat}")
+                        if len(category_agregats) > 20:
+                            st.write(f"... et {len(category_agregats) - 20} autres")
+        
+        # Analyser les montants par année
+        st.markdown("#### 📅 Évolution des montants par année")
+        
+        if 'Exercice' in self.data.columns and 'Montant' in self.data.columns:
+            # Agréger par année
+            yearly_totals = self.data.groupby('Exercice')['Montant'].agg(['sum', 'mean', 'count']).reset_index()
+            yearly_totals.columns = ['Année', 'Total (€)', 'Moyenne (€)', 'Nombre de lignes']
+            
+            # Convertir en millions
+            yearly_totals['Total (M€)'] = yearly_totals['Total (€)'] / 1000000
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                fig = px.line(yearly_totals, x='Année', y='Total (M€)',
+                             title="Total des montants par année (M€)",
+                             markers=True)
                 st.plotly_chart(fig, use_container_width=True)
             
-            # Matrice de corrélation entre indicateurs
-            st.markdown("#### 🔗 Relations entre indicateurs")
+            with col2:
+                fig = px.bar(yearly_totals, x='Année', y='Nombre de lignes',
+                            title="Nombre de lignes par année")
+                st.plotly_chart(fig, use_container_width=True)
             
-            numeric_cols = ['Recettes moy (M€)', 'Dette moy (M€)', 'Épargne moy (M€)', 'Ratio D/R']
-            corr_df = df_overview[numeric_cols].corr()
+            # Afficher le tableau
+            st.dataframe(yearly_totals.round(2), use_container_width=True)
+    
+    def categorize_aggregat(self, agregat):
+        """Catégorise un agrégat financier"""
+        if pd.isna(agregat):
+            return "Non catégorisé"
+        
+        agregat_str = str(agregat).lower()
+        
+        categories = {
+            'recettes': ['recette', 'revenu', 'produit', 'fiscal', 'taxe', 'impôt'],
+            'dépenses': ['depense', 'charge', 'fonctionnement', 'investissement', 'personnel'],
+            'dette': ['dette', 'emprunt', 'endettement', 'remboursement'],
+            'épargne': ['epargne', 'capacité', 'autofinancement'],
+            'fiscalité': ['fiscal', 'taxe', 'impôt', 'cotisation'],
+            'investissement': ['investissement', 'équipement', 'immobilisation']
+        }
+        
+        for category, keywords in categories.items():
+            for keyword in keywords:
+                if keyword in agregat_str:
+                    return category
+        
+        return "Autre"
+    
+    def create_commune_analysis_tab(self):
+        """Crée l'onglet d'analyse par commune"""
+        if not self.communes_config:
+            st.info("👈 Configurez d'abord les données dans la sidebar")
+            return
+        
+        st.markdown("### 🏙️ Analyse par commune")
+        
+        # Sélection de la commune
+        commune_options = list(self.communes_config.keys())
+        selected_commune = st.selectbox("Sélectionnez une commune:", commune_options)
+        
+        if selected_commune in self.communes_config:
+            config = self.communes_config[selected_commune]
             
-            fig = px.imshow(corr_df,
-                           text_auto='.2f',
-                           aspect='auto',
-                           title='Matrice de corrélation',
-                           color_continuous_scale='RdBu_r')
-            st.plotly_chart(fig, use_container_width=True)
-    
-    def create_analysis_tab(self, commune_name, year_range, indicators):
-        """Crée l'onglet Analyse détaillée"""
-        if not commune_name:
-            st.info("Sélectionnez une commune dans la sidebar")
-            return
-        
-        st.markdown(f'<h2 class="commune-header">🏙️ Analyse détaillée - {commune_name}</h2>', 
-                   unsafe_allow_html=True)
-        
-        if commune_name not in self.communes_config:
-            st.warning(f"Commune {commune_name} non trouvée dans les données")
-            return
-        
-        config = self.communes_config[commune_name]
-        years = [y for y in config['annees'] if year_range[0] <= y <= year_range[1]]
-        
-        if not years:
-            st.warning(f"Aucune donnée pour {commune_name} dans la période {year_range[0]}-{year_range[1]}")
-            return
-        
-        # Métriques principales
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            st.metric("📅 Période analysée", f"{year_range[0]}-{year_range[1]}")
-            st.metric("🏘️ Type", config['type'].replace('_', ' ').title())
-        
-        with col2:
-            last_year = max(years)
-            last_stats = config['stats_annuelles'].get(last_year, {})
-            st.metric("💰 Recettes", f"{last_stats.get('recettes', 0):.1f} M€")
-            st.metric("📈 Tendance", "▲ Croissante" if len(years) > 1 and 
-                     config['stats_annuelles'][years[-1]].get('recettes', 0) > 
-                     config['stats_annuelles'][years[-2]].get('recettes', 0) else "▼ Décroissante")
-        
-        with col3:
-            st.metric("💸 Dette", f"{last_stats.get('dette', 0):.1f} M€")
-            st.metric("📊 Ratio D/R", f"{last_stats.get('ratio_dette_recettes', 0):.2f}")
-        
-        with col4:
-            st.metric("💎 Épargne", f"{last_stats.get('epargne', 0):.1f} M€")
-            st.metric("📅 Années dispo", len(years))
-        
-        # Graphiques d'évolution temporelle
-        st.markdown("#### 📈 Évolution temporelle")
-        
-        # Préparer les données pour les graphiques
-        evolution_data = []
-        for year in years:
-            stats = config['stats_annuelles'].get(year, {})
-            evolution_data.append({
-                'Année': year,
-                'Recettes (M€)': stats.get('recettes', 0),
-                'Dépenses (M€)': stats.get('depenses', 0),
-                'Dette (M€)': stats.get('dette', 0),
-                'Épargne (M€)': stats.get('epargne', 0),
-                'Ratio D/R': stats.get('ratio_dette_recettes', 0)
-            })
-        
-        df_evolution = pd.DataFrame(evolution_data)
-        
-        # Graphique 1: Évolution des recettes et dépenses
-        fig1 = go.Figure()
-        fig1.add_trace(go.Scatter(x=df_evolution['Année'], y=df_evolution['Recettes (M€)'],
-                                 mode='lines+markers', name='Recettes', line=dict(color='#2A9D8F', width=3)))
-        fig1.add_trace(go.Scatter(x=df_evolution['Année'], y=df_evolution['Dépenses (M€)'],
-                                 mode='lines+markers', name='Dépenses', line=dict(color='#E76F51', width=3)))
-        fig1.update_layout(title='Évolution des recettes et dépenses',
-                          xaxis_title='Année',
-                          yaxis_title='Montant (M€)',
-                          hovermode='x unified')
-        st.plotly_chart(fig1, use_container_width=True)
-        
-        # Graphique 2: Évolution de la dette et du ratio
-        fig2 = make_subplots(specs=[[{"secondary_y": True}]])
-        fig2.add_trace(go.Bar(x=df_evolution['Année'], y=df_evolution['Dette (M€)'],
-                             name='Dette (M€)', marker_color='#F9A602'),
-                      secondary_y=False)
-        fig2.add_trace(go.Scatter(x=df_evolution['Année'], y=df_evolution['Ratio D/R'],
-                                 mode='lines+markers', name='Ratio D/R', line=dict(color='#6A0572', width=3)),
-                      secondary_y=True)
-        fig2.update_layout(title='Évolution de la dette et du ratio dette/recettes',
-                          xaxis_title='Année')
-        fig2.update_yaxes(title_text="Dette (M€)", secondary_y=False)
-        fig2.update_yaxes(title_text="Ratio D/R", secondary_y=True)
-        st.plotly_chart(fig2, use_container_width=True)
-        
-        # Tableau détaillé par année
-        st.markdown("#### 📋 Données annuelles détaillées")
-        st.dataframe(df_evolution.round(2), use_container_width=True, height=400)
-    
-    def create_comparison_tab(self, communes, year_range, indicators):
-        """Crée l'onglet Comparaison entre communes"""
-        if len(communes) < 2:
-            st.info("Sélectionnez au moins 2 communes à comparer dans la sidebar")
-            return
-        
-        st.markdown(f"### 🔄 Comparaison entre {len(communes)} communes")
-        
-        comparison_data = []
-        for commune in communes:
-            if commune in self.communes_config:
-                config = self.communes_config[commune]
-                years = [y for y in config['annees'] if year_range[0] <= y <= year_range[1]]
+            st.markdown(f"#### 📊 Analyse de {selected_commune}")
+            
+            # Métriques de base
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.metric("Type", config['type'].replace('_', ' ').title())
+                st.metric("Années disponibles", len(config['annees']))
+            
+            with col2:
+                if config['derniere_annee']:
+                    last_stats = config['stats_annuelles'].get(config['derniere_annee'], {})
+                    st.metric("Dernière année", config['derniere_annee'])
+                    st.metric("Recettes (M€)", f"{last_stats.get('recettes', 0):.1f}")
+            
+            with col3:
+                if config['derniere_annee']:
+                    last_stats = config['stats_annuelles'].get(config['derniere_annee'], {})
+                    st.metric("Dette (M€)", f"{last_stats.get('dette', 0):.1f}")
+                    st.metric("Ratio D/R", f"{last_stats.get('ratio_dette_recettes', 0):.2f}")
+            
+            # Graphique d'évolution
+            if config['annees']:
+                evolution_data = []
+                for year in sorted(config['annees']):
+                    stats = config['stats_annuelles'].get(year, {})
+                    evolution_data.append({
+                        'Année': year,
+                        'Recettes (M€)': stats.get('recettes', 0),
+                        'Dépenses (M€)': stats.get('depenses', 0),
+                        'Dette (M€)': stats.get('dette', 0),
+                        'Épargne (M€)': stats.get('epargne', 0)
+                    })
                 
-                if years:
-                    # Calculer les moyennes sur la période
-                    stats_list = [config['stats_annuelles'][y] for y in years if y in config['stats_annuelles']]
+                df_evolution = pd.DataFrame(evolution_data)
+                
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(x=df_evolution['Année'], y=df_evolution['Recettes (M€)'],
+                                        mode='lines+markers', name='Recettes', line=dict(color='#2A9D8F')))
+                fig.add_trace(go.Scatter(x=df_evolution['Année'], y=df_evolution['Dépenses (M€)'],
+                                        mode='lines+markers', name='Dépenses', line=dict(color='#E76F51')))
+                fig.add_trace(go.Scatter(x=df_evolution['Année'], y=df_evolution['Dette (M€)'],
+                                        mode='lines+markers', name='Dette', line=dict(color='#F9A602')))
+                
+                fig.update_layout(title=f'Évolution financière - {selected_commune}',
+                                xaxis_title='Année',
+                                yaxis_title='Montant (M€)',
+                                hovermode='x unified')
+                
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # Afficher les données
+                st.dataframe(df_evolution.round(2), use_container_width=True)
+    
+    def create_comparison_tab(self):
+        """Crée l'onglet de comparaison"""
+        if not self.communes_config:
+            st.info("👈 Configurez d'abord les données dans la sidebar")
+            return
+        
+        st.markdown("### 🔄 Comparaison entre communes")
+        
+        # Sélection des communes à comparer
+        commune_options = list(self.communes_config.keys())
+        selected_communes = st.multiselect(
+            "Sélectionnez les communes à comparer (2-5):",
+            commune_options,
+            default=commune_options[:3] if len(commune_options) >= 3 else commune_options
+        )
+        
+        if len(selected_communes) >= 2:
+            # Préparer les données de comparaison
+            comparison_data = []
+            
+            for commune in selected_communes:
+                if commune in self.communes_config:
+                    config = self.communes_config[commune]
                     
+                    # Calculer les moyennes sur toutes les années
+                    stats_list = list(config['stats_annuelles'].values())
                     if stats_list:
                         avg_recettes = np.mean([s.get('recettes', 0) for s in stats_list])
                         avg_dette = np.mean([s.get('dette', 0) for s in stats_list])
@@ -615,189 +660,48 @@ class ReunionFinancialDashboard:
                         comparison_data.append({
                             'Commune': commune,
                             'Type': config['type'].replace('_', ' ').title(),
-                            'Années analysées': len(years),
+                            'Années': len(config['annees']),
                             'Recettes moy (M€)': round(avg_recettes, 1),
                             'Dette moy (M€)': round(avg_dette, 1),
                             'Épargne moy (M€)': round(avg_epargne, 1),
-                            'Ratio D/R moy': round(avg_ratio, 2),
-                            'Dette/Hab (k€)': round((avg_dette * 1000) / 50000, 1) if avg_dette else 0  # Estimation
+                            'Ratio D/R moy': round(avg_ratio, 2)
                         })
-        
-        if comparison_data:
-            df_comparison = pd.DataFrame(comparison_data)
             
-            # Graphique de comparaison
-            fig = px.bar(df_comparison,
-                        x='Commune',
-                        y=['Recettes moy (M€)', 'Dette moy (M€)', 'Épargne moy (M€)'],
-                        title=f'Comparaison financière ({year_range[0]}-{year_range[1]})',
-                        barmode='group',
-                        color_discrete_sequence=['#2A9D8F', '#E76F51', '#F9A602'])
-            st.plotly_chart(fig, use_container_width=True)
-            
-            # Graphique radar pour comparaison multi-dimensionnelle
-            st.markdown("#### 📊 Comparaison multi-dimensionnelle (Radar)")
-            
-            # Normaliser les données pour le radar
-            radar_data = []
-            for idx, row in df_comparison.iterrows():
-                radar_data.append({
-                    'Commune': row['Commune'],
-                    'Recettes': row['Recettes moy (M€)'] / df_comparison['Recettes moy (M€)'].max() * 100,
-                    'Dette': row['Dette moy (M€)'] / df_comparison['Dette moy (M€)'].max() * 100 if df_comparison['Dette moy (M€)'].max() > 0 else 0,
-                    'Épargne': row['Épargne moy (M€)'] / df_comparison['Épargne moy (M€)'].max() * 100 if df_comparison['Épargne moy (M€)'].max() > 0 else 0,
-                    'Ratio': (1 - row['Ratio D/R moy'] / df_comparison['Ratio D/R moy'].max()) * 100 if df_comparison['Ratio D/R moy'].max() > 0 else 0
-                })
-            
-            df_radar = pd.DataFrame(radar_data)
-            
-            fig_radar = go.Figure()
-            for idx, row in df_radar.iterrows():
-                fig_radar.add_trace(go.Scatterpolar(
-                    r=[row['Recettes'], row['Dette'], row['Épargne'], row['Ratio'], row['Recettes']],
-                    theta=['Recettes', 'Dette', 'Épargne', 'Ratio', 'Recettes'],
-                    name=row['Commune'],
-                    fill='toself'
-                ))
-            
-            fig_radar.update_layout(
-                polar=dict(
-                    radialaxis=dict(
-                        visible=True,
-                        range=[0, 100]
-                    )
-                ),
-                showlegend=True,
-                title="Profil financier comparé (normalisé)"
-            )
-            st.plotly_chart(fig_radar, use_container_width=True)
-            
-            # Tableau de comparaison
-            st.markdown("#### 📋 Tableau comparatif")
-            st.dataframe(df_comparison, use_container_width=True, height=400)
-            
-            # Analyse des écarts
-            st.markdown("#### 📈 Analyse des écarts")
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                max_recettes = df_comparison.loc[df_comparison['Recettes moy (M€)'].idxmax()]
-                st.info(f"**🏆 Meilleures recettes:** {max_recettes['Commune']} ({max_recettes['Recettes moy (M€)']} M€)")
-            
-            with col2:
-                min_ratio = df_comparison.loc[df_comparison['Ratio D/R moy'].idxmin()]
-                st.info(f"**✅ Meilleur ratio:** {min_ratio['Commune']} ({min_ratio['Ratio D/R moy']})")
-    
-    def create_temporal_analysis_tab(self, year_range):
-        """Crée l'onglet Analyse temporelle globale"""
-        st.markdown("### 📅 Analyse temporelle globale")
-        
-        if not self.communes_config:
-            st.warning("Aucune donnée disponible")
-            return
-        
-        # Agréger les données par année
-        yearly_data = {}
-        
-        for commune, config in self.communes_config.items():
-            for year, stats in config['stats_annuelles'].items():
-                if year_range[0] <= year <= year_range[1]:
-                    if year not in yearly_data:
-                        yearly_data[year] = {
-                            'recettes': [],
-                            'dette': [],
-                            'epargne': [],
-                            'communes': []
-                        }
-                    
-                    yearly_data[year]['recettes'].append(stats.get('recettes', 0))
-                    yearly_data[year]['dette'].append(stats.get('dette', 0))
-                    yearly_data[year]['epargne'].append(stats.get('epargne', 0))
-                    yearly_data[year]['communes'].append(commune)
-        
-        # Préparer le DataFrame pour l'analyse
-        temporal_data = []
-        for year, data in sorted(yearly_data.items()):
-            if data['recettes']:
-                temporal_data.append({
-                    'Année': year,
-                    'Recettes moy (M€)': np.mean(data['recettes']),
-                    'Dette moy (M€)': np.mean(data['dette']),
-                    'Épargne moy (M€)': np.mean(data['epargne']),
-                    'Nb communes': len(data['communes']),
-                    'Recettes totales (M€)': np.sum(data['recettes']),
-                    'Dette totale (M€)': np.sum(data['dette'])
-                })
-        
-        if not temporal_data:
-            st.warning("Aucune donnée dans la période sélectionnée")
-            return
-        
-        df_temporal = pd.DataFrame(temporal_data)
-        
-        # Graphique d'évolution globale
-        fig = make_subplots(rows=2, cols=2,
-                           subplot_titles=('Évolution des recettes moyennes',
-                                         'Évolution de la dette moyenne',
-                                         'Évolution de l\'épargne moyenne',
-                                         'Nombre de communes par année'))
-        
-        # Recettes moyennes
-        fig.add_trace(go.Scatter(x=df_temporal['Année'], y=df_temporal['Recettes moy (M€)'],
-                                mode='lines+markers', name='Recettes moy',
-                                line=dict(color='#2A9D8F', width=3)),
-                     row=1, col=1)
-        
-        # Dette moyenne
-        fig.add_trace(go.Scatter(x=df_temporal['Année'], y=df_temporal['Dette moy (M€)'],
-                                mode='lines+markers', name='Dette moy',
-                                line=dict(color='#E76F51', width=3)),
-                     row=1, col=2)
-        
-        # Épargne moyenne
-        fig.add_trace(go.Scatter(x=df_temporal['Année'], y=df_temporal['Épargne moy (M€)'],
-                                mode='lines+markers', name='Épargne moy',
-                                line=dict(color='#F9A602', width=3)),
-                     row=2, col=1)
-        
-        # Nombre de communes
-        fig.add_trace(go.Bar(x=df_temporal['Année'], y=df_temporal['Nb communes'],
-                            name='Nb communes', marker_color='#6A0572'),
-                     row=2, col=2)
-        
-        fig.update_layout(height=600, showlegend=True, title_text="Évolution temporelle globale")
-        st.plotly_chart(fig, use_container_width=True)
-        
-        # Tableau des tendances
-        st.markdown("#### 📋 Tendance annuelle")
-        st.dataframe(df_temporal.round(2), use_container_width=True)
-        
-        # Calcul des taux de croissance
-        if len(df_temporal) > 1:
-            st.markdown("#### 📈 Taux de croissance annuels")
-            
-            growth_data = []
-            for i in range(1, len(df_temporal)):
-                prev = df_temporal.iloc[i-1]
-                curr = df_temporal.iloc[i]
+            if comparison_data:
+                df_comparison = pd.DataFrame(comparison_data)
                 
-                growth_recettes = ((curr['Recettes moy (M€)'] - prev['Recettes moy (M€)']) / prev['Recettes moy (M€)']) * 100 if prev['Recettes moy (M€)'] > 0 else 0
-                growth_dette = ((curr['Dette moy (M€)'] - prev['Dette moy (M€)']) / prev['Dette moy (M€)']) * 100 if prev['Dette moy (M€)'] > 0 else 0
+                # Graphique de comparaison
+                fig = px.bar(df_comparison,
+                            x='Commune',
+                            y=['Recettes moy (M€)', 'Dette moy (M€)', 'Épargne moy (M€)'],
+                            title='Comparaison financière',
+                            barmode='group',
+                            color_discrete_sequence=['#2A9D8F', '#E76F51', '#F9A602'])
                 
-                growth_data.append({
-                    'Période': f"{int(prev['Année'])}-{int(curr['Année'])}",
-                    'Δ Recettes (%)': round(growth_recettes, 1),
-                    'Δ Dette (%)': round(growth_dette, 1),
-                    'Recettes (M€)': round(curr['Recettes moy (M€)'], 1),
-                    'Dette (M€)': round(curr['Dette moy (M€)'], 1)
-                })
-            
-            if growth_data:
-                df_growth = pd.DataFrame(growth_data)
-                st.dataframe(df_growth, use_container_width=True)
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # Tableau de comparaison
+                st.dataframe(df_comparison, use_container_width=True)
+                
+                # Analyse des performances
+                st.markdown("#### 🏆 Analyse comparative")
+                
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    best_recettes = df_comparison.loc[df_comparison['Recettes moy (M€)'].idxmax()]
+                    st.info(f"**💰 Meilleures recettes:** {best_recettes['Commune']} ({best_recettes['Recettes moy (M€)']} M€)")
+                
+                with col2:
+                    best_epargne = df_comparison.loc[df_comparison['Épargne moy (M€)'].idxmax()]
+                    st.success(f"**💎 Meilleure épargne:** {best_epargne['Commune']} ({best_epargne['Épargne moy (M€)']} M€)")
+                
+                with col3:
+                    best_ratio = df_comparison.loc[df_comparison['Ratio D/R moy'].idxmin()]
+                    st.warning(f"**⚖️ Meilleur ratio:** {best_ratio['Commune']} ({best_ratio['Ratio D/R moy']})")
     
     def create_data_explorer_tab(self):
-        """Crée l'onglet Explorateur de données complet"""
+        """Crée l'onglet Explorateur de données"""
         st.markdown("### 🔍 Explorateur de données complet")
         
         if self.data.empty:
@@ -806,139 +710,79 @@ class ReunionFinancialDashboard:
         
         st.info(f"**Total des données:** {len(self.data):,} lignes × {len(self.data.columns)} colonnes")
         
-        # Options de filtrage avancé
-        st.markdown("#### 🎯 Filtres avancés")
+        # Filtres interactifs
+        st.markdown("#### 🎯 Filtrage des données")
         
-        col1, col2, col3 = st.columns(3)
+        col1, col2 = st.columns(2)
         
         with col1:
-            # Filtre par année
-            if 'Exercice' in self.data.columns:
-                years = sorted(self.data['Exercice'].dropna().unique())
-                selected_years = st.multiselect(
-                    "Filtrer par année:",
-                    years,
-                    default=years[:3] if len(years) > 3 else years
-                )
-            else:
-                selected_years = []
+            # Filtre par colonne de texte
+            text_cols = self.data.select_dtypes(include=['object']).columns.tolist()
+            if text_cols:
+                filter_col = st.selectbox("Filtrer par colonne:", text_cols)
+                if filter_col:
+                    unique_values = self.data[filter_col].dropna().unique()
+                    selected_values = st.multiselect(f"Valeurs pour {filter_col}:", unique_values)
         
         with col2:
-            # Filtre par commune
-            commune_col = None
-            for col in self.data.columns:
-                if 'commune' in str(col).lower():
-                    commune_col = col
-                    break
-            
-            if commune_col:
-                communes = sorted(self.data[commune_col].dropna().unique())
-                selected_communes = st.multiselect(
-                    "Filtrer par commune:",
-                    communes,
-                    default=communes[:5] if len(communes) > 5 else communes
-                )
-            else:
-                selected_communes = []
-        
-        with col3:
-            # Filtre par colonnes
-            all_columns = self.data.columns.tolist()
-            selected_columns = st.multiselect(
-                "Colonnes à afficher:",
-                all_columns,
-                default=all_columns[:15] if len(all_columns) > 15 else all_columns
-            )
+            # Filtre par valeur numérique
+            numeric_cols = self.data.select_dtypes(include=[np.number]).columns.tolist()
+            if numeric_cols:
+                num_filter_col = st.selectbox("Filtrer par valeur numérique:", numeric_cols)
+                if num_filter_col:
+                    min_val = float(self.data[num_filter_col].min())
+                    max_val = float(self.data[num_filter_col].max())
+                    value_range = st.slider(f"Plage pour {num_filter_col}:", min_val, max_val, (min_val, max_val))
         
         # Appliquer les filtres
         filtered_data = self.data.copy()
         
-        if selected_years and 'Exercice' in filtered_data.columns:
-            filtered_data = filtered_data[filtered_data['Exercice'].isin(selected_years)]
+        if 'selected_values' in locals() and selected_values and filter_col:
+            filtered_data = filtered_data[filtered_data[filter_col].isin(selected_values)]
         
-        if selected_communes and commune_col:
-            filtered_data = filtered_data[filtered_data[commune_col].isin(selected_communes)]
-        
-        if selected_columns:
-            filtered_data = filtered_data[selected_columns]
+        if 'value_range' in locals() and num_filter_col:
+            filtered_data = filtered_data[
+                (filtered_data[num_filter_col] >= value_range[0]) & 
+                (filtered_data[num_filter_col] <= value_range[1])
+            ]
         
         # Affichage des données filtrées
         st.markdown(f"#### 📄 Données filtrées ({len(filtered_data):,} lignes)")
         
         # Options d'affichage
-        display_mode = st.radio(
-            "Mode d'affichage:",
-            ["Tableau complet", "Aperçu (1000 lignes)", "Statistiques"],
-            horizontal=True
+        display_rows = st.slider("Nombre de lignes à afficher:", 10, 10000, 1000, 100)
+        
+        # Sélection des colonnes
+        all_columns = filtered_data.columns.tolist()
+        selected_columns = st.multiselect(
+            "Sélectionnez les colonnes à afficher:",
+            all_columns,
+            default=all_columns[:10] if len(all_columns) > 10 else all_columns
         )
         
-        if display_mode == "Tableau complet":
-            # Afficher TOUTES les données avec pagination virtuelle
+        if selected_columns:
+            display_data = filtered_data[selected_columns]
+        else:
+            display_data = filtered_data
+        
+        # Afficher les données
+        st.dataframe(
+            display_data.head(display_rows),
+            use_container_width=True,
+            height=600
+        )
+        
+        # Statistiques
+        st.markdown("#### 📊 Statistiques")
+        
+        if len(numeric_cols) > 0:
             st.dataframe(
-                filtered_data,
-                use_container_width=True,
-                height=600
+                filtered_data[numeric_cols].describe().round(2),
+                use_container_width=True
             )
-            
-        elif display_mode == "Aperçu (1000 lignes)":
-            st.dataframe(
-                filtered_data.head(1000),
-                use_container_width=True,
-                height=600
-            )
-            
-        else:  # Statistiques
-            st.markdown("#### 📊 Statistiques descriptives")
-            
-            # Statistiques numériques
-            numeric_cols = filtered_data.select_dtypes(include=[np.number]).columns
-            if len(numeric_cols) > 0:
-                st.dataframe(
-                    filtered_data[numeric_cols].describe().round(2),
-                    use_container_width=True
-                )
-            
-            # Informations sur les colonnes catégorielles
-            cat_cols = filtered_data.select_dtypes(include=['object']).columns
-            if len(cat_cols) > 0:
-                st.markdown("#### 📝 Colonnes catégorielles")
-                for col in cat_cols[:5]:  # Limiter à 5 colonnes
-                    unique_vals = filtered_data[col].nunique()
-                    st.write(f"**{col}:** {unique_vals} valeurs uniques")
-                    if unique_vals < 20:
-                        st.write(f"Valeurs: {', '.join(map(str, filtered_data[col].dropna().unique()[:10]))}")
-                        if unique_vals > 10:
-                            st.write("...")
-        
-        # Options d'export
-        st.markdown("#### 📥 Export des données")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            if st.button("💾 Exporter les données filtrées (CSV)"):
-                csv = filtered_data.to_csv(index=False, sep=';', encoding='utf-8-sig')
-                st.download_button(
-                    label="Télécharger CSV",
-                    data=csv,
-                    file_name=f"donnees_filtrees_{len(filtered_data)}_lignes.csv",
-                    mime="text/csv"
-                )
-        
-        with col2:
-            if st.button("📊 Exporter résumé statistique"):
-                if len(numeric_cols) > 0:
-                    stats = filtered_data[numeric_cols].describe().round(2)
-                    csv_stats = stats.to_csv(sep=';', encoding='utf-8-sig')
-                    st.download_button(
-                        label="Télécharger statistiques",
-                        data=csv_stats,
-                        file_name="statistiques_resume.csv",
-                        mime="text/csv"
-                    )
     
     def run_dashboard(self):
-        """Exécute le dashboard complet"""
+        """Exécute le dashboard"""
         self.create_header()
         
         # Si pas de données, afficher les instructions
@@ -952,51 +796,32 @@ class ReunionFinancialDashboard:
             1. Le fichier est bien dans votre dépôt GitHub
             2. Il s'appelle exactement 'ofgl-base-communes.csv'
             3. Il est dans le même dossier que ce script
-            
-            **Structure attendue du fichier:**
-            - Format CSV avec séparateur ';'
-            - Colonnes: 'Exercice', 'Nom Commune', 'Montant', 'Agrégat'
-            - Données des 24 communes de La Réunion
             """)
             return
         
-        # Récupérer les paramètres de la sidebar
-        selected_commune, year_range, compare_communes, analysis_type, indicators = self.create_sidebar()
+        # Analyser la structure des données
+        self.analyze_data_structure()
+        
+        # Préparer les données financières
+        self.prepare_financial_data()
         
         # Créer les onglets
-        tab_titles = [
-            "📊 Vue d'ensemble", 
-            "🏙️ Analyse détaillée", 
-            "🔄 Comparaisons", 
-            "📅 Évolution temporelle", 
-            "🔍 Explorateur de données"
-        ]
+        tab_titles = ["📊 Vue d'ensemble", "🔍 Exploration", "🏙️ Analyse commune", "🔄 Comparaisons", "📁 Données brutes"]
         
         tabs = st.tabs(tab_titles)
         
-        # Onglet 1: Vue d'ensemble (TOUTES les données)
         with tabs[0]:
             self.create_overview_tab()
         
-        # Onglet 2: Analyse détaillée
         with tabs[1]:
-            if selected_commune:
-                self.create_analysis_tab(selected_commune, year_range, indicators)
-            else:
-                st.info("👈 Sélectionnez une commune dans la sidebar")
+            self.create_analysis_tab()
         
-        # Onglet 3: Comparaisons
         with tabs[2]:
-            if selected_commune:
-                self.create_comparison_tab([selected_commune] + compare_communes, year_range, indicators)
-            else:
-                st.info("👈 Sélectionnez des communes à comparer dans la sidebar")
+            self.create_commune_analysis_tab()
         
-        # Onglet 4: Évolution temporelle
         with tabs[3]:
-            self.create_temporal_analysis_tab(year_range)
+            self.create_comparison_tab()
         
-        # Onglet 5: Explorateur de données
         with tabs[4]:
             self.create_data_explorer_tab()
         
@@ -1004,16 +829,21 @@ class ReunionFinancialDashboard:
         st.markdown("---")
         st.markdown("""
         **📊 Dashboard d'analyse financière des communes de La Réunion**  
-        *Données OFGL • Analyse temporelle complète • 24 communes analysées*
+        *Données OFGL • Exploration interactive • Analyse complète*
         
         *Fonctionnalités:*
-        - ✅ **Affichage complet** de toutes les données
-        - ✅ **Analyse temporelle** par exercice budgétaire
-        - ✅ **Comparaison** des 24 communes
-        - ✅ **Graphiques interactifs** et visualisations avancées
-        - ✅ **Export des données** en CSV
+        - ✅ **Exploration complète** des 25,690 lignes de données
+        - ✅ **Identification automatique** des colonnes importantes
+        - ✅ **Analyse par commune** et comparaisons
+        - ✅ **Visualisations interactives** avec Plotly
+        - ✅ **Filtrage avancé** des données
         
-        *Note: Les indicateurs sont calculés à partir des données disponibles.*
+        *Instructions:*
+        1. Consultez la sidebar pour voir la structure des données
+        2. Identifiez les colonnes clés (commune, exercice, agrégat, montant)
+        3. Configurez les colonnes dans la section "Configuration des colonnes"
+        4. Lancez la préparation des données
+        5. Explorez les différentes analyses dans les onglets
         """)
 
 # Exécution principale
