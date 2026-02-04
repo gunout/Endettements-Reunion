@@ -56,21 +56,34 @@ st.markdown("""
         border-radius: 5px;
         margin: 15px 0;
     }
+    .small-metric {
+        font-size: 0.9rem;
+    }
+    .region-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 10px;
+        padding: 15px;
+        margin: 10px 0;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 class ReunionEndettementDashboard:
     def __init__(self):
         self.colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#F9A602', '#6A0572', 
-                      '#AB83A1', '#5CAB7D', '#2A9D8F', '#E76F51', '#264653']
+                      '#AB83A1', '#5CAB7D', '#2A9D8F', '#E76F51', '#264653',
+                      '#E9C46A', '#2A9D8F', '#E63946', '#457B9D', '#1D3557',
+                      '#A8DADC', '#F4A261', '#2A9D8F', '#E76F51', '#264653',
+                      '#588157', '#3A5A40', '#A3B18A', '#DAD7CD']
         self.start_year = 2002
         self.end_year = 2025
         
-        # Configuration des communes réunionnaises
+        # Configuration complète des 24 communes réunionnaises
         self.communes_config = self._get_communes_config()
         
     def _get_communes_config(self):
-        """Retourne la configuration de toutes les communes"""
+        """Retourne la configuration complète des 24 communes"""
         return {
             "Saint-Denis": {
                 "population_base": 150000,
@@ -79,7 +92,9 @@ class ReunionEndettementDashboard:
                 "specialites": ["administration", "services", "commerce", "sante", "education"],
                 "endettement_base": 120,
                 "fiscalite_base": 0.45,
-                "couleur": "#264653"
+                "couleur": "#264653",
+                "region": "Nord",
+                "arrondissement": "Saint-Denis"
             },
             "Saint-Paul": {
                 "population_base": 105000,
@@ -88,7 +103,9 @@ class ReunionEndettementDashboard:
                 "specialites": ["tourisme", "commerce", "grands_projets"],
                 "endettement_base": 85,
                 "fiscalite_base": 0.42,
-                "couleur": "#2A9D8F"
+                "couleur": "#2A9D8F",
+                "region": "Ouest",
+                "arrondissement": "Saint-Paul"
             },
             "Saint-Pierre": {
                 "population_base": 85000,
@@ -97,7 +114,9 @@ class ReunionEndettementDashboard:
                 "specialites": ["port", "commerce", "enseignement_superieur"],
                 "endettement_base": 65,
                 "fiscalite_base": 0.44,
-                "couleur": "#E76F51"
+                "couleur": "#E76F51",
+                "region": "Sud",
+                "arrondissement": "Saint-Pierre"
             },
             "Le Tampon": {
                 "population_base": 80000,
@@ -106,7 +125,9 @@ class ReunionEndettementDashboard:
                 "specialites": ["agriculture", "equipements_collectifs"],
                 "endettement_base": 55,
                 "fiscalite_base": 0.40,
-                "couleur": "#F9A602"
+                "couleur": "#F9A602",
+                "region": "Sud",
+                "arrondissement": "Saint-Pierre"
             },
             "Saint-Louis": {
                 "population_base": 55000,
@@ -115,7 +136,218 @@ class ReunionEndettementDashboard:
                 "specialites": ["sucrerie", "zones_industrielles"],
                 "endettement_base": 45,
                 "fiscalite_base": 0.43,
-                "couleur": "#6A0572"
+                "couleur": "#6A0572",
+                "region": "Sud",
+                "arrondissement": "Saint-Pierre"
+            },
+            "Saint-Leu": {
+                "population_base": 34000,
+                "budget_base": 35,
+                "type": "cotiere_touristique",
+                "specialites": ["tourisme", "surf", "infrastructures_touristiques"],
+                "endettement_base": 30,
+                "fiscalite_base": 0.38,
+                "couleur": "#AB83A1",
+                "region": "Ouest",
+                "arrondissement": "Saint-Paul"
+            },
+            "Le Port": {
+                "population_base": 35000,
+                "budget_base": 45,
+                "type": "portuaire_industrielle",
+                "specialites": ["port", "industrie", "logistique"],
+                "endettement_base": 40,
+                "fiscalite_base": 0.41,
+                "couleur": "#5CAB7D",
+                "region": "Ouest",
+                "arrondissement": "Saint-Paul"
+            },
+            "La Possession": {
+                "population_base": 34000,
+                "budget_base": 38,
+                "type": "periurbaine_nord",
+                "specialites": ["transport", "infrastructures_routieres"],
+                "endettement_base": 32,
+                "fiscalite_base": 0.39,
+                "couleur": "#45B7D1",
+                "region": "Ouest",
+                "arrondissement": "Saint-Paul"
+            },
+            "Saint-André": {
+                "population_base": 58000,
+                "budget_base": 52,
+                "type": "est_urbaine",
+                "specialites": ["agriculture", "sucrerie"],
+                "endettement_base": 48,
+                "fiscalite_base": 0.42,
+                "couleur": "#4ECDC4",
+                "region": "Est",
+                "arrondissement": "Saint-Benoît"
+            },
+            "Saint-Benoît": {
+                "population_base": 37000,
+                "budget_base": 40,
+                "type": "est_rurale",
+                "specialites": ["vanille", "tourisme_vert"],
+                "endettement_base": 35,
+                "fiscalite_base": 0.37,
+                "couleur": "#FF6B6B",
+                "region": "Est",
+                "arrondissement": "Saint-Benoît"
+            },
+            "Saint-Joseph": {
+                "population_base": 38000,
+                "budget_base": 36,
+                "type": "rurale_cotiere",
+                "specialites": ["agriculture", "pêche"],
+                "endettement_base": 32,
+                "fiscalite_base": 0.36,
+                "couleur": "#A8DADC",
+                "region": "Sud",
+                "arrondissement": "Saint-Pierre"
+            },
+            "Saint-Philippe": {
+                "population_base": 5200,
+                "budget_base": 12,
+                "type": "rurale_isolee",
+                "specialites": ["agriculture", "tourisme_aventure"],
+                "endettement_base": 8,
+                "fiscalite_base": 0.32,
+                "couleur": "#457B9D",
+                "region": "Sud",
+                "arrondissement": "Saint-Pierre"
+            },
+            "Sainte-Marie": {
+                "population_base": 34000,
+                "budget_base": 32,
+                "type": "urbaine_nord",
+                "specialites": ["aeroport", "commerce"],
+                "endettement_base": 28,
+                "fiscalite_base": 0.38,
+                "couleur": "#1D3557",
+                "region": "Nord",
+                "arrondissement": "Saint-Denis"
+            },
+            "Sainte-Suzanne": {
+                "population_base": 24000,
+                "budget_base": 28,
+                "type": "urbaine_nord",
+                "specialites": ["agriculture", "industrie_legere"],
+                "endettement_base": 22,
+                "fiscalite_base": 0.37,
+                "couleur": "#E63946",
+                "region": "Nord",
+                "arrondissement": "Saint-Denis"
+            },
+            "Les Avirons": {
+                "population_base": 11000,
+                "budget_base": 18,
+                "type": "rurale_ouest",
+                "specialites": ["agriculture", "artisanat"],
+                "endettement_base": 15,
+                "fiscalite_base": 0.35,
+                "couleur": "#F4A261",
+                "region": "Ouest",
+                "arrondissement": "Saint-Paul"
+            },
+            "Entre-Deux": {
+                "population_base": 7000,
+                "budget_base": 15,
+                "type": "rurale_interieure",
+                "specialites": ["agriculture", "tourisme_vert"],
+                "endettement_base": 12,
+                "fiscalite_base": 0.34,
+                "couleur": "#2A9D8F",
+                "region": "Sud",
+                "arrondissement": "Saint-Pierre"
+            },
+            "L'Étang-Salé": {
+                "population_base": 14000,
+                "budget_base": 22,
+                "type": "cotiere_residentielle",
+                "specialites": ["tourisme", "commerce"],
+                "endettement_base": 18,
+                "fiscalite_base": 0.36,
+                "couleur": "#588157",
+                "region": "Ouest",
+                "arrondissement": "Saint-Paul"
+            },
+            "Petite-Île": {
+                "population_base": 12000,
+                "budget_base": 16,
+                "type": "cotiere_sud",
+                "specialites": ["pêche", "agriculture"],
+                "endettement_base": 13,
+                "fiscalite_base": 0.33,
+                "couleur": "#3A5A40",
+                "region": "Sud",
+                "arrondissement": "Saint-Pierre"
+            },
+            "La Plaine-des-Palmistes": {
+                "population_base": 6600,
+                "budget_base": 14,
+                "type": "rurale_altitude",
+                "specialites": ["tourisme_vert", "agriculture"],
+                "endettement_base": 11,
+                "fiscalite_base": 0.32,
+                "couleur": "#A3B18A",
+                "region": "Est",
+                "arrondissement": "Saint-Benoît"
+            },
+            "Bras-Panon": {
+                "population_base": 13000,
+                "budget_base": 20,
+                "type": "rurale_est",
+                "specialites": ["vanille", "agriculture"],
+                "endettement_base": 16,
+                "fiscalite_base": 0.34,
+                "couleur": "#DAD7CD",
+                "region": "Est",
+                "arrondissement": "Saint-Benoît"
+            },
+            "Cilaos": {
+                "population_base": 5500,
+                "budget_base": 13,
+                "type": "cirque_montagne",
+                "specialites": ["tourisme_thermal", "vin"],
+                "endettement_base": 10,
+                "fiscalite_base": 0.31,
+                "couleur": "#E9C46A",
+                "region": "Sud",
+                "arrondissement": "Saint-Pierre"
+            },
+            "Salazie": {
+                "population_base": 7500,
+                "budget_base": 15,
+                "type": "cirque_nord",
+                "specialites": ["agriculture", "tourisme"],
+                "endettement_base": 12,
+                "fiscalite_base": 0.33,
+                "couleur": "#2A9D8F",
+                "region": "Nord",
+                "arrondissement": "Saint-Denis"
+            },
+            "Trois-Bassins": {
+                "population_base": 7000,
+                "budget_base": 14,
+                "type": "rurale_ouest",
+                "specialites": ["agriculture", "artisanat"],
+                "endettement_base": 11,
+                "fiscalite_base": 0.32,
+                "couleur": "#E76F51",
+                "region": "Ouest",
+                "arrondissement": "Saint-Paul"
+            },
+            "Sainte-Rose": {
+                "population_base": 6500,
+                "budget_base": 12,
+                "type": "rurale_est",
+                "specialites": ["pêche", "volcan"],
+                "endettement_base": 9,
+                "fiscalite_base": 0.30,
+                "couleur": "#264653",
+                "region": "Est",
+                "arrondissement": "Saint-Benoît"
             }
         }
     
@@ -129,65 +361,190 @@ class ReunionEndettementDashboard:
         
         data = {'Annee': [date.year for date in dates]}
         
-        # Simulation simplifiée pour le dashboard
-        # Recettes
-        base_revenue = config["budget_base"]
-        data['Recettes_Totales'] = [base_revenue * (1 + 0.035*i) * np.random.normal(1, 0.07) 
-                                   for i, date in enumerate(dates)]
+        # Données démographiques
+        data['Population'] = []
+        for i, date in enumerate(dates):
+            if config["type"] in ["capitale_regionale", "urbaine"]:
+                growth_rate = 0.015
+            elif config["type"] in ["touristique", "cotiere_touristique"]:
+                growth_rate = 0.018
+            else:
+                growth_rate = 0.012
+            growth = 1 + growth_rate * i
+            data['Population'].append(config["population_base"] * growth)
         
-        # Dépenses
-        base_expenses = config["budget_base"] * 0.96
-        data['Depenses_Totales'] = [base_expenses * (1 + 0.032*i) * np.random.normal(1, 0.06) 
-                                   for i, date in enumerate(dates)]
+        # Recettes totales
+        data['Recettes_Totales'] = []
+        for i, date in enumerate(dates):
+            if config["type"] in ["capitale_regionale", "urbaine"]:
+                growth_rate = 0.035
+            elif config["type"] in ["touristique", "cotiere_touristique"]:
+                growth_rate = 0.038
+            else:
+                growth_rate = 0.030
+            growth = 1 + growth_rate * i
+            noise = np.random.normal(1, 0.07)
+            data['Recettes_Totales'].append(config["budget_base"] * growth * noise)
         
-        # Dette
-        base_debt = config["endettement_base"]
+        # Dépenses totales
+        data['Depenses_Totales'] = []
+        for i, date in enumerate(dates):
+            growth = 1 + 0.032 * i
+            noise = np.random.normal(1, 0.06)
+            data['Depenses_Totales'].append(config["budget_base"] * 0.96 * growth * noise)
+        
+        # Dette totale avec variations réalistes
         data['Dette_Totale'] = []
         for i, date in enumerate(dates):
             year = date.year
+            base_debt = config["endettement_base"]
+            
+            # Évolution avec pics d'investissement
             if year in [2007, 2013, 2019, 2024]:
                 change = 1.3
             elif year in [2009, 2015, 2021]:
                 change = 0.95
             else:
                 change = 1.02
-            data['Dette_Totale'].append(base_debt * change * np.random.normal(1, 0.08))
+            
+            # Ajustement selon le type de commune
+            if config["type"] in ["capitale_regionale", "urbaine"]:
+                multiplier = 1.1
+            elif config["type"] in ["rurale", "rurale_isolee"]:
+                multiplier = 0.9
+            else:
+                multiplier = 1.0
+            
+            noise = np.random.normal(1, 0.08)
+            data['Dette_Totale'].append(base_debt * change * multiplier * noise)
         
-        # Ratios
-        data['Taux_Endettement'] = [0.65 * (1 - 0.008*max(0, year-2010)) * np.random.normal(1, 0.05) 
-                                   for year in data['Annee']]
+        # Impôts locaux
+        data['Impots_Locaux'] = []
+        for i, date in enumerate(dates):
+            base_tax = config["budget_base"] * 0.38
+            growth = 1 + 0.025 * i
+            noise = np.random.normal(1, 0.08)
+            data['Impots_Locaux'].append(base_tax * growth * noise)
         
+        # Dotations État
+        data['Dotations_Etat'] = []
+        for i, date in enumerate(dates):
+            year = date.year
+            base_grants = config["budget_base"] * 0.40
+            if year >= 2010:
+                increase = 1 + 0.01 * (year - 2010)
+            else:
+                increase = 1
+            noise = np.random.normal(1, 0.05)
+            data['Dotations_Etat'].append(base_grants * increase * noise)
+        
+        # Ratios financiers
+        data['Taux_Endettement'] = []
+        for i, date in enumerate(dates):
+            year = date.year
+            base_ratio = 0.65
+            if year >= 2010:
+                improvement = 1 - 0.008 * (year - 2010)
+            else:
+                improvement = 1
+            noise = np.random.normal(1, 0.05)
+            data['Taux_Endettement'].append(base_ratio * improvement * noise)
+        
+        # Capacité de remboursement
         data['Capacite_Remboursement'] = []
-        for i, row in enumerate(data['Annee']):
-            cap = 2.0 - 0.05*i + np.random.normal(0, 0.1)
-            data['Capacite_Remboursement'].append(max(0.5, cap))
+        data['Epargne_Brute'] = []
+        for i, date in enumerate(dates):
+            year = date.year
+            base_saving = config["budget_base"] * 0.04
+            if year >= 2010:
+                improvement = 1 + 0.006 * (year - 2010)
+            else:
+                improvement = 1
+            noise = np.random.normal(1, 0.12)
+            epargne = base_saving * improvement * noise
+            data['Epargne_Brute'].append(epargne)
+            
+            # Simulation des annuités
+            dette = data['Dette_Totale'][i]
+            annuites = dette * 0.10 * np.random.normal(1, 0.06)
+            
+            if annuites > 0:
+                cap = epargne / annuites
+            else:
+                cap = 2.0
+            
+            noise_cap = np.random.normal(1, 0.08)
+            data['Capacite_Remboursement'].append(cap * noise_cap)
         
-        data['Ratio_Endettement_Recettes'] = [data['Dette_Totale'][i] / data['Recettes_Totales'][i] 
-                                             for i in range(len(data['Annee']))]
-        
-        # Épargne brute
-        data['Epargne_Brute'] = [config["budget_base"] * 0.04 * (1 + 0.006*max(0, year-2010)) * np.random.normal(1, 0.12)
-                                for year in data['Annee']]
-        
-        # Structure des recettes
-        data['Impots_Locaux'] = [data['Recettes_Totales'][i] * 0.38 * np.random.normal(1, 0.08) 
-                                for i in range(len(data['Annee']))]
-        data['Dotations_Etat'] = [data['Recettes_Totales'][i] * 0.40 * np.random.normal(1, 0.05) 
-                                 for i in range(len(data['Annee']))]
+        # Ratio dette/recettes
+        data['Ratio_Endettement_Recettes'] = []
+        for i in range(len(data['Annee'])):
+            dette = data['Dette_Totale'][i]
+            recettes = data['Recettes_Totales'][i]
+            if recettes > 0:
+                ratio = dette / recettes
+            else:
+                ratio = 1.0
+            data['Ratio_Endettement_Recettes'].append(ratio)
         
         df = pd.DataFrame(data)
+        
+        # Ajouter des événements spécifiques à La Réunion
+        self._add_reunion_events(df, config)
+        
         return df, config
+    
+    def _add_reunion_events(self, df, config):
+        """Ajoute l'impact des événements historiques sur les données"""
+        for i, row in df.iterrows():
+            year = row['Annee']
+            
+            # Plan de développement réunionnais (2003-2007)
+            if 2003 <= year <= 2007:
+                df.loc[i, 'Recettes_Totales'] *= 1.15
+                df.loc[i, 'Dette_Totale'] *= 1.25
+            
+            # Crise économique (2008-2009)
+            if 2008 <= year <= 2009:
+                df.loc[i, 'Recettes_Totales'] *= 0.97
+                df.loc[i, 'Dette_Totale'] *= 1.05
+            
+            # Plan de relance DOM (2010-2013)
+            if 2010 <= year <= 2013:
+                df.loc[i, 'Dotations_Etat'] *= 1.18
+                df.loc[i, 'Dette_Totale'] *= 1.10
+            
+            # Contrat de projet État-Région (2014-2018)
+            if 2014 <= year <= 2018:
+                df.loc[i, 'Dette_Totale'] *= 1.15
+            
+            # Mouvements sociaux (2018-2019)
+            if year in [2018, 2019]:
+                df.loc[i, 'Depenses_Totales'] *= 1.08
+            
+            # Crise COVID-19 (2020-2021)
+            if 2020 <= year <= 2021:
+                if year == 2020:
+                    df.loc[i, 'Dotations_Etat'] *= 1.25
+                    df.loc[i, 'Recettes_Totales'] *= 0.95
+                else:
+                    df.loc[i, 'Recettes_Totales'] *= 0.92
+            
+            # Plan de relance (2022-2025)
+            if year >= 2022:
+                df.loc[i, 'Dotations_Etat'] *= 1.15
+                df.loc[i, 'Capacite_Remboursement'] *= 1.1
     
     def create_header(self):
         """Crée l'en-tête du dashboard"""
-        st.markdown('<h1 class="main-header">🏝️ Analyse d\'Endettement Communal - La Réunion</h1>', 
+        st.markdown('<h1 class="main-header">🏝️ Analyse d\'Endettement des 24 Communes de La Réunion</h1>', 
                    unsafe_allow_html=True)
         
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
             st.markdown("""
-            **Dashboard d'analyse financière des communes réunionnaises**  
-            *Période d'analyse: 2002-2025 • Données simulées pour analyse comparative*
+            **Dashboard d'analyse financière comparative des communes réunionnaises**  
+            *Période d'analyse: 2002-2025 • Données simulées pour analyse stratégique*
             """)
     
     def create_sidebar(self):
@@ -198,12 +555,30 @@ class ReunionEndettementDashboard:
             
             st.markdown("## 🔧 Paramètres d'analyse")
             
-            # Sélection de la commune
+            # Sélection de la commune avec recherche
             commune_options = list(self.communes_config.keys())
             selected_commune = st.selectbox(
                 "Sélectionnez une commune:",
                 commune_options,
                 index=0
+            )
+            
+            # Filtrage par région
+            st.markdown("### 🗺️ Filtre par région")
+            regions = sorted(set([config["region"] for config in self.communes_config.values()]))
+            selected_region = st.multiselect(
+                "Filtrer par région:",
+                regions,
+                default=regions
+            )
+            
+            # Filtrage par type de commune
+            st.markdown("### 🏙️ Filtre par type")
+            commune_types = sorted(set([config["type"] for config in self.communes_config.values()]))
+            selected_types = st.multiselect(
+                "Filtrer par type de commune:",
+                commune_types,
+                default=commune_types
             )
             
             # Période d'analyse
@@ -215,37 +590,117 @@ class ReunionEndettementDashboard:
                 value=(self.start_year, self.end_year)
             )
             
-            # Filtres additionnels
+            # Options d'affichage
             st.markdown("### ⚙️ Options d'affichage")
             show_advanced = st.checkbox("Afficher les indicateurs avancés")
-            compare_mode = st.checkbox("Mode comparatif (max 3 communes)")
+            compare_mode = st.checkbox("Mode comparatif avancé", value=True)
             
             # Comparaison avec d'autres communes
             if compare_mode:
                 compare_communes = st.multiselect(
                     "Sélectionnez des communes à comparer:",
                     [c for c in commune_options if c != selected_commune],
-                    max_selections=2
+                    max_selections=3
                 )
             else:
                 compare_communes = []
             
-            # Téléchargement des données
-            st.markdown("### 💾 Export des données")
-            if st.button("📥 Exporter les données au format CSV"):
-                # Code pour exporter les données
-                pass
-            
-            # Information sur la commune
+            # Statistiques globales
             st.markdown("---")
-            st.markdown("### ℹ️ À propos")
-            st.markdown("""
-            Ce dashboard présente une analyse **simulée** de l'endettement des communes réunionnaises.
+            st.markdown("### 📊 Statistiques globales")
             
-            **Note:** Les données sont générées à des fins de démonstration et ne représentent pas les chiffres réels.
+            total_population = sum([config["population_base"] for config in self.communes_config.values()])
+            total_debt = sum([config["endettement_base"] for config in self.communes_config.values()])
+            
+            st.metric("Population totale", f"{total_population:,}")
+            st.metric("Dette totale estimée", f"{total_debt:.0f} M€")
+            st.metric("Nombre de communes", "24")
+            
+            st.markdown("---")
+            st.markdown("#### ℹ️ À propos")
+            st.markdown("""
+            **Source:** Données simulées pour démonstration  
+            **Période:** 2002-2025  
+            **Mise à jour:** Février 2024
             """)
             
-            return selected_commune, year_range, show_advanced, compare_communes
+            return selected_commune, year_range, show_advanced, compare_communes, selected_region, selected_types
+    
+    def create_commune_overview(self):
+        """Crée une vue d'ensemble de toutes les communes"""
+        st.markdown("### 🗺️ Vue d'ensemble des 24 communes")
+        
+        # Créer un dataframe récapitulatif
+        overview_data = []
+        for commune_name, config in self.communes_config.items():
+            df, _ = self.generate_financial_data(commune_name)
+            last_row = df.iloc[-1]
+            
+            overview_data.append({
+                'Commune': commune_name,
+                'Région': config['region'],
+                'Type': config['type'],
+                'Population': config['population_base'],
+                'Budget (M€)': config['budget_base'],
+                'Dette (M€)': last_row['Dette_Totale'],
+                'Taux Endettement (%)': last_row['Taux_Endettement'] * 100,
+                'Capacité Remb.': last_row['Capacite_Remboursement'],
+                'Couleur': config['couleur']
+            })
+        
+        overview_df = pd.DataFrame(overview_data)
+        
+        # Tableau interactif
+        st.dataframe(
+            overview_df.style.format({
+                'Dette (M€)': '{:.1f}',
+                'Taux Endettement (%)': '{:.1f}',
+                'Capacité Remb.': '{:.2f}'
+            }).apply(lambda x: ['background-color: ' + x['Couleur'] + '; color: white' 
+                              if col == 'Commune' else '' for col in x.index], axis=1),
+            use_container_width=True,
+            height=600,
+            column_config={
+                "Commune": st.column_config.TextColumn("Commune", width="medium"),
+                "Région": st.column_config.TextColumn("Région", width="small"),
+                "Type": st.column_config.TextColumn("Type", width="medium"),
+                "Population": st.column_config.NumberColumn("Population", format="%d"),
+                "Budget (M€)": st.column_config.NumberColumn("Budget", format="%.1f"),
+                "Dette (M€)": st.column_config.NumberColumn("Dette", format="%.1f"),
+                "Taux Endettement (%)": st.column_config.NumberColumn("Taux", format="%.1f"),
+                "Capacité Remb.": st.column_config.NumberColumn("Capacité", format="%.2f")
+            }
+        )
+        
+        # Graphique de répartition par région
+        st.markdown("#### 📊 Répartition par région")
+        
+        region_data = overview_df.groupby('Région').agg({
+            'Commune': 'count',
+            'Population': 'sum',
+            'Dette (M€)': 'sum'
+        }).reset_index()
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            fig = px.pie(region_data, values='Commune', names='Région',
+                        title='Nombre de communes par région',
+                        color_discrete_sequence=px.colors.qualitative.Set3)
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with col2:
+            fig = px.pie(region_data, values='Population', names='Région',
+                        title='Population par région',
+                        color_discrete_sequence=px.colors.qualitative.Set2)
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with col3:
+            fig = px.bar(region_data, x='Région', y='Dette (M€)',
+                        title='Dette totale par région (M€)',
+                        color='Région',
+                        color_discrete_sequence=px.colors.qualitative.Set1)
+            st.plotly_chart(fig, use_container_width=True)
     
     def create_summary_metrics(self, df, config, commune_name):
         """Crée les indicateurs de résumé"""
@@ -257,21 +712,24 @@ class ReunionEndettementDashboard:
         
         with col1:
             st.markdown("#### 📍 Caractéristiques")
+            st.markdown(f"**Région:** {config['region']}")
             st.markdown(f"**Type:** {config['type']}")
             st.markdown(f"**Spécialités:** {', '.join(config['specialites'])}")
-            st.markdown(f"**Population estimée:** {config['population_base']:,} hab")
+            st.markdown(f"**Population 2025:** {df['Population'].iloc[-1]:,.0f} hab")
         
         with col2:
-            st.markdown("#### 💰 Budget")
-            st.markdown(f"**Budget de base:** {config['budget_base']} M€")
-            st.markdown(f"**Dette de base:** {config['endettement_base']} M€")
-            st.markdown(f"**Taux fiscalité:** {config['fiscalite_base']*100:.1f}%")
-        
-        with col3:
-            st.markdown("#### 📊 Indicateurs 2025")
+            st.markdown("#### 💰 Situation financière 2025")
             last_row = df.iloc[-1]
             st.metric("Dette totale", f"{last_row['Dette_Totale']:.1f} M€")
+            st.metric("Recettes annuelles", f"{last_row['Recettes_Totales']:.1f} M€")
             st.metric("Taux d'endettement", f"{last_row['Taux_Endettement']*100:.1f}%")
+        
+        with col3:
+            st.markdown("#### 📈 Évolution et capacité")
+            debt_growth = ((df['Dette_Totale'].iloc[-1] / df['Dette_Totale'].iloc[0]) - 1) * 100
+            revenue_growth = ((df['Recettes_Totales'].iloc[-1] / df['Recettes_Totales'].iloc[0]) - 1) * 100
+            st.metric("Croissance dette", f"{debt_growth:+.1f}%")
+            st.metric("Croissance recettes", f"{revenue_growth:+.1f}%")
             st.metric("Capacité remboursement", f"{last_row['Capacite_Remboursement']:.2f}")
         
         # Alertes de situation
@@ -282,18 +740,29 @@ class ReunionEndettementDashboard:
         capacity = last_data['Capacite_Remboursement']
         debt_ratio = last_data['Ratio_Endettement_Recettes']
         
-        if capacity < 1.2:
-            st.markdown('<div class="warning-box">', unsafe_allow_html=True)
-            st.warning("⚠️ **Situation préoccupante** - La capacité de remboursement est faible. Actions correctives recommandées.")
-            st.markdown('</div>', unsafe_allow_html=True)
-        elif capacity < 2.0:
-            st.markdown('<div class="highlight-box">', unsafe_allow_html=True)
-            st.info("📊 **Situation sous contrôle** - Endettement maîtrisé mais vigilance requise.")
-            st.markdown('</div>', unsafe_allow_html=True)
-        else:
-            st.markdown('<div class="highlight-box">', unsafe_allow_html=True)
-            st.success("✅ **Situation saine** - Bonne capacité de remboursement et endettement maîtrisé.")
-            st.markdown('</div>', unsafe_allow_html=True)
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if capacity < 1.2:
+                st.error("⚠️ **Situation préoccupante**")
+                st.markdown("La capacité de remboursement est faible. Actions correctives urgentes nécessaires.")
+            elif capacity < 2.0:
+                st.warning("📊 **Situation sous contrôle**")
+                st.markdown("Endettement maîtrisé mais vigilance requise sur les dépenses.")
+            else:
+                st.success("✅ **Situation saine**")
+                st.markdown("Bonne capacité de remboursement et endettement maîtrisé.")
+        
+        with col2:
+            if debt_ratio > 1.5:
+                st.error("📉 **Ratio dette/recettes élevé**")
+                st.markdown(f"Ratio: {debt_ratio:.2f} (la dette représente {debt_ratio:.1f}x les recettes annuelles)")
+            elif debt_ratio > 1.0:
+                st.warning("⚖️ **Ratio dette/recettes modéré**")
+                st.markdown(f"Ratio: {debt_ratio:.2f} - Surveillance recommandée")
+            else:
+                st.success("📈 **Ratio dette/recettes favorable**")
+                st.markdown(f"Ratio: {debt_ratio:.2f} - Situation favorable")
     
     def create_debt_evolution_chart(self, df, commune_name, config):
         """Crée le graphique d'évolution de la dette"""
@@ -322,6 +791,30 @@ class ReunionEndettementDashboard:
             hovertemplate='Année: %{x}<br>Recettes: %{y:.1f} M€<extra></extra>'
         ))
         
+        # Marqueurs pour événements importants
+        events = {
+            2007: "Plan développement",
+            2009: "Crise économique",
+            2013: "Plan relance DOM",
+            2018: "Mouvements sociaux",
+            2020: "COVID-19",
+            2024: "Plan relance"
+        }
+        
+        for year, event in events.items():
+            if year in df['Annee'].values:
+                idx = df[df['Annee'] == year].index[0]
+                fig.add_annotation(
+                    x=year,
+                    y=df.loc[idx, 'Dette_Totale'],
+                    text=event,
+                    showarrow=True,
+                    arrowhead=1,
+                    arrowsize=1,
+                    arrowwidth=2,
+                    arrowcolor=config['couleur']
+                )
+        
         fig.update_layout(
             title=f'Évolution de la dette - {commune_name}',
             xaxis_title='Année',
@@ -342,25 +835,6 @@ class ReunionEndettementDashboard:
         )
         
         st.plotly_chart(fig, use_container_width=True)
-        
-        # Métriques d'évolution
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            debt_growth = ((df['Dette_Totale'].iloc[-1] / df['Dette_Totale'].iloc[0]) - 1) * 100
-            st.metric("Croissance dette", f"{debt_growth:.1f}%")
-        
-        with col2:
-            revenue_growth = ((df['Recettes_Totales'].iloc[-1] / df['Recettes_Totales'].iloc[0]) - 1) * 100
-            st.metric("Croissance recettes", f"{revenue_growth:.1f}%")
-        
-        with col3:
-            avg_debt = df['Dette_Totale'].mean()
-            st.metric("Dette moyenne", f"{avg_debt:.1f} M€")
-        
-        with col4:
-            max_debt = df['Dette_Totale'].max()
-            st.metric("Dette maximale", f"{max_debt:.1f} M€")
     
     def create_financial_ratios_chart(self, df, commune_name, config):
         """Crée le graphique des ratios financiers"""
@@ -414,34 +888,21 @@ class ReunionEndettementDashboard:
         )
         
         st.plotly_chart(fig, use_container_width=True)
-        
-        # Analyse des ratios
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            avg_capacity = df['Capacite_Remboursement'].mean()
-            status = "✅ Bonne" if avg_capacity > 1.5 else "⚠️ Moyenne" if avg_capacity > 1.0 else "❌ Faible"
-            st.metric("Capacité moyenne", f"{avg_capacity:.2f}", status)
-        
-        with col2:
-            min_capacity = df['Capacite_Remboursement'].min()
-            st.metric("Capacité minimale", f"{min_capacity:.2f}")
-        
-        with col3:
-            current_ratio = df['Ratio_Endettement_Recettes'].iloc[-1]
-            st.metric("Ratio dette/recettes", f"{current_ratio:.2f}")
     
     def create_revenue_structure_chart(self, df, commune_name, config):
         """Crée le graphique de la structure des recettes"""
         st.markdown("### 💰 Structure des recettes communales")
         
-        # Préparation des données
-        years = df['Annee'].tail(5)  # Dernières 5 années
+        # Calcul des parts
+        df['Autres_Recettes'] = df['Recettes_Totales'] - df['Impots_Locaux'] - df['Dotations_Etat']
+        
+        # Dernières 5 années
+        years = df['Annee'].tail(5).tolist()
         
         categories = {
             'Impôts Locaux': df['Impots_Locaux'].tail(5).values,
             'Dotations État': df['Dotations_Etat'].tail(5).values,
-            'Autres Recettes': (df['Recettes_Totales'] - df['Impots_Locaux'] - df['Dotations_Etat']).tail(5).values
+            'Autres Recettes': df['Autres_Recettes'].tail(5).values
         }
         
         fig = go.Figure()
@@ -453,8 +914,7 @@ class ReunionEndettementDashboard:
                 x=years,
                 y=values,
                 marker_color=colors[i],
-                hovertemplate='Année: %{x}<br>Montant: %{y:.1f} M€<br>Part: %{customdata:.1f}%<extra></extra>',
-                customdata=[(values[j] / df['Recettes_Totales'].iloc[-5+j]) * 100 for j in range(5)]
+                hovertemplate='Année: %{x}<br>Montant: %{y:.1f} M€<extra></extra>'
             ))
         
         fig.update_layout(
@@ -468,95 +928,191 @@ class ReunionEndettementDashboard:
         
         st.plotly_chart(fig, use_container_width=True)
         
-        # Analyse de la structure
+        # Analyse de la structure moyenne
+        avg_tax_share = (df['Impots_Locaux'].mean() / df['Recettes_Totales'].mean()) * 100
+        avg_state_share = (df['Dotations_Etat'].mean() / df['Recettes_Totales'].mean()) * 100
+        avg_other_share = 100 - avg_tax_share - avg_state_share
+        
         col1, col2, col3 = st.columns(3)
-        
         with col1:
-            tax_share = (df['Impots_Locaux'].mean() / df['Recettes_Totales'].mean()) * 100
-            st.metric("Part des impôts", f"{tax_share:.1f}%")
-        
+            st.metric("Part moyenne impôts", f"{avg_tax_share:.1f}%")
         with col2:
-            state_share = (df['Dotations_Etat'].mean() / df['Recettes_Totales'].mean()) * 100
-            st.metric("Part de l'État", f"{state_share:.1f}%")
-        
+            st.metric("Part moyenne État", f"{avg_state_share:.1f}%")
         with col3:
-            other_share = 100 - tax_share - state_share
-            st.metric("Autres recettes", f"{other_share:.1f}%")
+            st.metric("Autres recettes", f"{avg_other_share:.1f}%")
     
     def create_comparative_analysis(self, communes_to_compare, year_range):
         """Crée l'analyse comparative entre communes"""
         st.markdown("### 📊 Analyse comparative entre communes")
         
+        if len(communes_to_compare) == 0:
+            st.info("👈 Sélectionnez des communes à comparer dans la sidebar")
+            return
+        
+        all_communes = communes_to_compare
         comparison_data = []
         
-        for commune_name in communes_to_compare:
+        for commune_name in all_communes:
             df, config = self.generate_financial_data(commune_name)
             df_filtered = df[(df['Annee'] >= year_range[0]) & (df['Annee'] <= year_range[1])]
             
+            last_row = df_filtered.iloc[-1]
+            first_row = df_filtered.iloc[0]
+            
             comparison_data.append({
                 'Commune': commune_name,
-                'Dette_Moyenne': df_filtered['Dette_Totale'].mean(),
-                'Recettes_Moyennes': df_filtered['Recettes_Totales'].mean(),
-                'Taux_Endettement_Moyen': df_filtered['Taux_Endettement'].mean() * 100,
-                'Capacite_Moyenne': df_filtered['Capacite_Remboursement'].mean(),
+                'Région': config['region'],
+                'Type': config['type'],
+                'Dette_2025': last_row['Dette_Totale'],
+                'Recettes_2025': last_row['Recettes_Totales'],
+                'Taux_Endettement': last_row['Taux_Endettement'] * 100,
+                'Capacite_Remboursement': last_row['Capacite_Remboursement'],
+                'Croissance_Dette': ((last_row['Dette_Totale'] / first_row['Dette_Totale']) - 1) * 100,
+                'Ratio_Dette_Recettes': last_row['Ratio_Endettement_Recettes'],
                 'Couleur': config['couleur']
             })
         
         comparison_df = pd.DataFrame(comparison_data)
         
-        # Graphique comparatif
+        # Graphique radar pour comparaison multicritères
+        st.markdown("#### 📈 Profil financier comparé")
+        
+        categories = ['Dette_2025', 'Recettes_2025', 'Taux_Endettement', 
+                     'Capacite_Remboursement', 'Ratio_Dette_Recettes']
+        
         fig = go.Figure()
         
-        for _, row in comparison_df.iterrows():
-            fig.add_trace(go.Bar(
-                x=['Dette Moyenne (M€)', 'Recettes Moyennes (M€)', 'Taux Endettement (%)', 'Capacité Remboursement'],
-                y=[row['Dette_Moyenne'], row['Recettes_Moyennes'], row['Taux_Endettement_Moyen'], row['Capacite_Moyenne']],
+        for idx, row in comparison_df.iterrows():
+            # Normalisation des valeurs pour le radar
+            values = [
+                row['Dette_2025'] / comparison_df['Dette_2025'].max(),
+                row['Recettes_2025'] / comparison_df['Recettes_2025'].max(),
+                row['Taux_Endettement'] / 100,  # Déjà en pourcentage
+                row['Capacite_Remboursement'] / comparison_df['Capacite_Remboursement'].max(),
+                row['Ratio_Dette_Recettes'] / comparison_df['Ratio_Dette_Recettes'].max()
+            ]
+            
+            fig.add_trace(go.Scatterpolar(
+                r=values,
+                theta=['Dette', 'Recettes', 'Taux Endett.', 'Capacité', 'Ratio D/R'],
                 name=row['Commune'],
-                marker_color=row['Couleur'],
-                hovertemplate='Commune: %{customdata}<br>Valeur: %{y:.1f}<extra></extra>',
-                customdata=[row['Commune']] * 4
+                line_color=row['Couleur'],
+                fill='toself'
             ))
         
         fig.update_layout(
-            title='Comparaison des indicateurs clés',
-            barmode='group',
-            height=500,
-            hovermode='x unified',
-            yaxis=dict(title='Valeur'),
-            legend=dict(
-                yanchor="top",
-                y=0.99,
-                xanchor="left",
-                x=0.01
-            )
+            polar=dict(
+                radialaxis=dict(
+                    visible=True,
+                    range=[0, 1]
+                )
+            ),
+            showlegend=True,
+            height=500
         )
         
         st.plotly_chart(fig, use_container_width=True)
         
-        # Tableau comparatif
-        st.markdown("#### 📋 Tableau comparatif détaillé")
+        # Tableau comparatif détaillé
+        st.markdown("#### 📋 Indicateurs comparatifs")
         
         display_df = comparison_df.copy()
-        display_df['Dette/Recettes'] = display_df['Dette_Moyenne'] / display_df['Recettes_Moyennes']
-        display_df['Classification'] = display_df['Capacite_Moyenne'].apply(
+        display_df['Classification'] = display_df['Capacite_Remboursement'].apply(
             lambda x: '✅ Saine' if x > 2.0 else '⚠️ Sous contrôle' if x > 1.2 else '❌ Préoccupante'
         )
         
         st.dataframe(
-            display_df[['Commune', 'Dette_Moyenne', 'Recettes_Moyennes', 
-                       'Taux_Endettement_Moyen', 'Capacite_Moyenne', 
-                       'Dette/Recettes', 'Classification']].round(2),
+            display_df[['Commune', 'Région', 'Type', 'Dette_2025', 'Recettes_2025', 
+                       'Taux_Endettement', 'Capacite_Remboursement', 'Croissance_Dette',
+                       'Ratio_Dette_Recettes', 'Classification']].round(2),
             use_container_width=True,
             column_config={
                 "Commune": "Commune",
-                "Dette_Moyenne": st.column_config.NumberColumn("Dette Moyenne (M€)", format="%.1f"),
-                "Recettes_Moyennes": st.column_config.NumberColumn("Recettes Moyennes (M€)", format="%.1f"),
-                "Taux_Endettement_Moyen": st.column_config.NumberColumn("Taux Endettement (%)", format="%.1f"),
-                "Capacite_Moyenne": st.column_config.NumberColumn("Capacité Moyenne", format="%.2f"),
-                "Dette/Recettes": st.column_config.NumberColumn("Ratio Dette/Recettes", format="%.2f"),
+                "Région": "Région",
+                "Type": "Type",
+                "Dette_2025": st.column_config.NumberColumn("Dette 2025 (M€)", format="%.1f"),
+                "Recettes_2025": st.column_config.NumberColumn("Recettes 2025 (M€)", format="%.1f"),
+                "Taux_Endettement": st.column_config.NumberColumn("Taux Endett. (%)", format="%.1f"),
+                "Capacite_Remboursement": st.column_config.NumberColumn("Capacité", format="%.2f"),
+                "Croissance_Dette": st.column_config.NumberColumn("Croiss. Dette (%)", format="%.1f"),
+                "Ratio_Dette_Recettes": st.column_config.NumberColumn("Ratio D/R", format="%.2f"),
                 "Classification": "Situation"
             }
         )
+    
+    def create_ranking_analysis(self, year_range):
+        """Crée un classement des communes par indicateurs"""
+        st.markdown("### 🏆 Classement des communes")
+        
+        ranking_data = []
+        
+        for commune_name, config in self.communes_config.items():
+            df, _ = self.generate_financial_data(commune_name)
+            df_filtered = df[(df['Annee'] >= year_range[0]) & (df['Annee'] <= year_range[1])]
+            last_row = df_filtered.iloc[-1]
+            
+            ranking_data.append({
+                'Commune': commune_name,
+                'Région': config['region'],
+                'Dette_par_Habitant': (last_row['Dette_Totale'] * 1000000) / df_filtered['Population'].mean(),
+                'Capacite_Remboursement': last_row['Capacite_Remboursement'],
+                'Taux_Endettement': last_row['Taux_Endettement'] * 100,
+                'Ratio_Dette_Recettes': last_row['Ratio_Endettement_Recettes'],
+                'Epargne_Brute': last_row['Epargne_Brute']
+            })
+        
+        ranking_df = pd.DataFrame(ranking_data)
+        
+        # Sélection de l'indicateur de classement
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            ranking_metric = st.selectbox(
+                "Classer par:",
+                ['Capacite_Remboursement', 'Dette_par_Habitant', 'Taux_Endettement', 
+                 'Ratio_Dette_Recettes', 'Epargne_Brute'],
+                format_func=lambda x: {
+                    'Capacite_Remboursement': 'Capacité de remboursement',
+                    'Dette_par_Habitant': 'Dette par habitant',
+                    'Taux_Endettement': 'Taux d\'endettement',
+                    'Ratio_Dette_Recettes': 'Ratio dette/recettes',
+                    'Epargne_Brute': 'Épargne brute'
+                }[x]
+            )
+        
+        with col2:
+            ascending = st.checkbox("Ordre croissant", 
+                                  value=(ranking_metric in ['Dette_par_Habitant', 'Taux_Endettement', 'Ratio_Dette_Recettes']))
+        
+        # Classement
+        sorted_df = ranking_df.sort_values(by=ranking_metric, ascending=ascending)
+        sorted_df['Rang'] = range(1, len(sorted_df) + 1)
+        
+        # Affichage du classement
+        st.dataframe(
+            sorted_df[['Rang', 'Commune', 'Région', ranking_metric]].head(10),
+            use_container_width=True,
+            column_config={
+                "Rang": "Rang",
+                "Commune": "Commune",
+                "Région": "Région",
+                ranking_metric: st.column_config.NumberColumn(
+                    "Valeur",
+                    format="%.2f" if ranking_metric != 'Dette_par_Habitant' else "%.0f"
+                )
+            }
+        )
+        
+        # Visualisation du classement
+        fig = px.bar(sorted_df.head(10), 
+                    x=ranking_metric, 
+                    y='Commune',
+                    orientation='h',
+                    color='Région',
+                    title=f'Top 10 - {ranking_metric.replace("_", " ").title()}',
+                    color_discrete_sequence=px.colors.qualitative.Set3)
+        
+        st.plotly_chart(fig, use_container_width=True)
     
     def create_recommandations(self, df, config):
         """Crée la section des recommandations"""
@@ -566,113 +1122,79 @@ class ReunionEndettementDashboard:
         capacity = last_data['Capacite_Remboursement']
         debt_ratio = last_data['Ratio_Endettement_Recettes']
         
-        if capacity < 1.2:
-            st.error("**Situation nécessitant des actions urgentes:**")
-            st.markdown("""
-            1. **Maîtrise des dépenses de fonctionnement**
-               - Révision des contrats de services
-               - Optimisation des achats publics
-               - Rationalisation des effectifs
-            
-            2. **Restructuration de la dette**
-               - Renégociation des taux d'intérêt
-               - Rééchelonnement si nécessaire
-               - Consolidation des emprunts
-            
-            3. **Augmentation des recettes**
-               - Révision des bases fiscales
-               - Développement de nouvelles sources
-               - Optimisation du patrimoine communal
-            """)
-            
-        elif capacity < 2.0:
-            st.warning("**Actions de consolidation recommandées:**")
-            st.markdown("""
-            1. **Maintenir la discipline budgétaire**
-               - Suivi rigoureux des engagements
-               - Contrôle des dépenses discrétionnaires
-               - Renforcement de l'épargne brute
-            
-            2. **Investissements sélectifs**
-               - Prioriser les projets générateurs d'économies
-               - Privilégier les infrastructures durables
-               - Développer les partenariats public-privé
-            
-            3. **Anticipation des risques**
-               - Stress tests financiers réguliers
-               - Constitution de provisions
-               - Plans de contingence
-            """)
-            
-        else:
-            st.success("**Opportunités d'optimisation:**")
-            st.markdown("""
-            1. **Investissements structurants**
-               - Modernisation des équipements publics
-               - Transition écologique et énergétique
-               - Développement numérique
-            
-            2. **Optimisation de la trésorerie**
-               - Placement des excédents
-               - Réduction des délais de paiement
-               - Gestion proactive des flux
-            
-            3. **Développement territorial**
-               - Projets d'aménagement concertés
-               - Valorisation du patrimoine
-               - Attractivité économique
-            """)
-        
-        # Recommandations générales
-        st.markdown("#### 🌟 Bonnes pratiques pour toutes les communes")
-        st.markdown("""
-        - **Transparence financière:** Publication régulière des comptes
-        - **Gouvernance:** Implication des citoyens dans les choix budgétaires
-        - **Formation:** Renforcement des compétences des élus et agents
-        - **Prospective:** Élaboration de scénarios à moyen et long terme
-        - **Coopération intercommunale:** Mutualisation des moyens et compétences
-        """)
-    
-    def create_historical_context(self):
-        """Crée la section du contexte historique réunionnais"""
-        st.markdown("### 📅 Contexte historique de La Réunion")
-        
-        tabs = st.tabs(["2002-2007", "2008-2013", "2014-2019", "2020-2025"])
+        # Recommandations spécifiques
+        tabs = st.tabs(["Priorités", "Investissements", "Gouvernance"])
         
         with tabs[0]:
-            st.markdown("""
-            #### Plan de développement réunionnais (2002-2007)
-            - **Investissements massifs** dans les infrastructures
-            - Augmentation des **dotations spécifiques DOM**
-            - Développement des **services publics** locaux
-            - **Croissance démographique** soutenue
-            """)
+            if capacity < 1.2:
+                st.error("**Actions prioritaires immédiates:**")
+                st.markdown("""
+                1. **Révision du plan pluriannuel d'investissement**
+                   - Report des projets non prioritaires
+                   - Rééchelonnement des projets en cours
+                
+                2. **Optimisation des recettes**
+                   - Actualisation des bases fiscales
+                   - Recouvrement des impôts en retard
+                   - Développement de nouvelles ressources
+                
+                3. **Maîtrise des dépenses**
+                   - Audit des contrats de service
+                   - Rationalisation des achats
+                   - Optimisation des effectifs
+                """)
+            else:
+                st.success("**Actions d'optimisation:**")
+                st.markdown("""
+                1. **Investissements structurants**
+                   - Projets à fort retour sur investissement
+                   - Infrastructures durables
+                   - Numérisation des services
+                
+                2. **Renforcement de l'épargne**
+                   - Constitution de réserves
+                   - Gestion proactive de la trésorerie
+                   - Optimisation des placements
+                
+                3. **Préparation aux risques**
+                   - Plans de continuité d'activité
+                   - Stress tests financiers
+                   - Assurance des risques majeurs
+                """)
         
         with tabs[1]:
-            st.markdown("""
-            #### Crise économique et plans de relance (2008-2013)
-            - Impact de la **crise financière mondiale**
-            - Plans de **relance spécifiques aux DOM**
-            - Accentuation des **déséquilibres sociaux**
-            - Renforcement des **aides de l'État**
+            st.markdown("**Orientation des investissements:**")
+            st.markdown(f"""
+            Compte tenu des spécialités de {config['specialites']}:
+            
+            **Investissements prioritaires:**
+            - {config['specialites'][0]}: Modernisation des équipements
+            - {config['specialites'][1] if len(config['specialites']) > 1 else 'Infrastructures'}: Développement des capacités
+            - Transition écologique: Adaptation au changement climatique
+            
+            **Financement recommandé:**
+            - Fonds européens: {config['region']} est éligible
+            - Dotations spécifiques DOM
+            - Partenariats public-privé
             """)
         
         with tabs[2]:
+            st.markdown("**Amélioration de la gouvernance:**")
             st.markdown("""
-            #### Contrat de projet État-Région (2014-2019)
-            - **Grands travaux d'infrastructure** (routes, équipements)
-            - Mouvements **sociaux de 2018-2019**
-            - Augmentation de la **fiscalité locale**
-            - Développement des **politiques sociales**
-            """)
-        
-        with tabs[3]:
-            st.markdown("""
-            #### Crise COVID-19 et transition (2020-2025)
-            - **Choc économique** de la pandémie
-            - **Plans de soutien exceptionnels** de l'État
-            - Accélération de la **transition écologique**
-            - **Relance spécifique DOM** post-crise
+            1. **Transparence financière**
+               - Publication trimestrielle des indicateurs
+               - Portail open data des finances communales
+               - Réunions publiques de restitution
+            
+            2. **Participation citoyenne**
+               - Budget participatif
+               - Consultations sur les grands projets
+               - Commission des finances ouverte
+            
+            3. **Formation et compétences**
+               - Formation continue des élus
+               - Recrutement de compétences financières
+               - Échange de bonnes pratiques intercommunales
             """)
     
     def run_dashboard(self):
@@ -680,167 +1202,226 @@ class ReunionEndettementDashboard:
         self.create_header()
         
         # Récupération des paramètres
-        selected_commune, year_range, show_advanced, compare_communes = self.create_sidebar()
+        selected_commune, year_range, show_advanced, compare_communes, selected_region, selected_types = self.create_sidebar()
         
-        # Génération des données
-        df, config = self.generate_financial_data(selected_commune)
+        # Filtrage des communes par région et type
+        filtered_communes = [
+            commune for commune, config in self.communes_config.items()
+            if config['region'] in selected_region and config['type'] in selected_types
+        ]
         
-        # Filtrage par année
-        df_filtered = df[(df['Annee'] >= year_range[0]) & (df['Annee'] <= year_range[1])]
-        
-        # Affichage principal
-        tab1, tab2, tab3, tab4 = st.tabs([
-            "📊 Vue d'ensemble", 
-            "📈 Analyse détaillée", 
+        # Navigation principale
+        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+            "🏠 Vue d'ensemble", 
+            "🏙️ Analyse communale", 
             "🔄 Comparaisons", 
+            "🏆 Classements", 
             "📋 Recommandations"
         ])
         
         with tab1:
-            # Vue d'ensemble
-            self.create_summary_metrics(df_filtered, config, selected_commune)
+            # Vue d'ensemble de toutes les communes
+            self.create_commune_overview()
             
-            col1, col2 = st.columns(2)
+            # Statistiques globales
+            st.markdown("### 📈 Tendances globales")
             
-            with col1:
-                self.create_debt_evolution_chart(df_filtered, selected_commune, config)
+            total_data = []
+            for commune in filtered_communes:
+                df, _ = self.generate_financial_data(commune)
+                df_filtered = df[(df['Annee'] >= year_range[0]) & (df['Annee'] <= year_range[1])]
+                
+                for _, row in df_filtered.iterrows():
+                    total_data.append({
+                        'Annee': row['Annee'],
+                        'Commune': commune,
+                        'Dette': row['Dette_Totale'],
+                        'Recettes': row['Recettes_Totales']
+                    })
             
-            with col2:
-                self.create_financial_ratios_chart(df_filtered, selected_commune, config)
+            total_df = pd.DataFrame(total_data)
+            annual_totals = total_df.groupby('Annee').agg({
+                'Dette': 'sum',
+                'Recettes': 'sum'
+            }).reset_index()
             
-            # Structure des recettes
-            self.create_revenue_structure_chart(df_filtered, selected_commune, config)
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=annual_totals['Annee'], y=annual_totals['Dette'],
+                                    name='Dette totale (M€)', line=dict(color='#E76F51', width=3)))
+            fig.add_trace(go.Scatter(x=annual_totals['Annee'], y=annual_totals['Recettes'],
+                                    name='Recettes totales (M€)', line=dict(color='#2A9D8F', width=3)))
+            
+            fig.update_layout(title='Évolution de la dette et des recettes - Toutes communes',
+                            xaxis_title='Année', yaxis_title='Montant (M€)',
+                            height=400)
+            
+            st.plotly_chart(fig, use_container_width=True)
         
         with tab2:
-            # Analyse détaillée
-            st.markdown(f"### 🔍 Analyse financière détaillée - {selected_commune}")
-            
-            # Tableau des données
-            st.markdown("#### 📋 Données financières complètes")
-            st.dataframe(
-                df_filtered.style.format({
-                    'Dette_Totale': '{:.1f}',
-                    'Recettes_Totales': '{:.1f}',
-                    'Depenses_Totales': '{:.1f}',
-                    'Taux_Endettement': '{:.3f}',
-                    'Capacite_Remboursement': '{:.2f}',
-                    'Ratio_Endettement_Recettes': '{:.2f}'
-                }),
-                use_container_width=True,
-                height=400
-            )
-            
-            # Téléchargement des données
-            csv = df_filtered.to_csv(index=False)
-            st.download_button(
-                label="📥 Télécharger les données (CSV)",
-                data=csv,
-                file_name=f"{selected_commune}_donnees_financieres_{year_range[0]}_{year_range[1]}.csv",
-                mime="text/csv"
-            )
-            
-            # Graphiques supplémentaires
-            if show_advanced:
-                st.markdown("#### 📊 Analyse avancée")
+            # Analyse de la commune sélectionnée
+            if selected_commune in filtered_communes:
+                df, config = self.generate_financial_data(selected_commune)
+                df_filtered = df[(df['Annee'] >= year_range[0]) & (df['Annee'] <= year_range[1])]
+                
+                self.create_summary_metrics(df_filtered, config, selected_commune)
                 
                 col1, col2 = st.columns(2)
                 
                 with col1:
-                    # Évolution de l'épargne brute
-                    fig = px.area(df_filtered, x='Annee', y='Epargne_Brute',
-                                 title='Évolution de l\'épargne brute',
-                                 labels={'Epargne_Brute': 'Épargne brute (M€)', 'Annee': 'Année'})
-                    st.plotly_chart(fig, use_container_width=True)
+                    self.create_debt_evolution_chart(df_filtered, selected_commune, config)
+                    self.create_revenue_structure_chart(df_filtered, selected_commune, config)
                 
                 with col2:
-                    # Correlation dette-recettes
-                    fig = px.scatter(df_filtered, x='Recettes_Totales', y='Dette_Totale',
-                                     trendline="ols",
-                                     title='Correlation entre recettes et dette',
-                                     labels={'Recettes_Totales': 'Recettes (M€)', 
-                                            'Dette_Totale': 'Dette (M€)'})
-                    st.plotly_chart(fig, use_container_width=True)
+                    self.create_financial_ratios_chart(df_filtered, selected_commune, config)
+                    
+                    # Tableau des données annuelles
+                    st.markdown("#### 📊 Données annuelles")
+                    st.dataframe(
+                        df_filtered[['Annee', 'Dette_Totale', 'Recettes_Totales', 
+                                    'Depenses_Totales', 'Taux_Endettement', 
+                                    'Capacite_Remboursement']].style.format({
+                            'Dette_Totale': '{:.1f}',
+                            'Recettes_Totales': '{:.1f}',
+                            'Depenses_Totales': '{:.1f}',
+                            'Taux_Endettement': '{:.3f}',
+                            'Capacite_Remboursement': '{:.2f}'
+                        }),
+                        use_container_width=True,
+                        height=300
+                    )
+            else:
+                st.warning("La commune sélectionnée ne correspond pas aux filtres actuels.")
         
         with tab3:
             # Comparaisons
             if compare_communes:
                 self.create_comparative_analysis([selected_commune] + compare_communes, year_range)
             else:
-                st.info("👈 Activez le mode comparatif dans la sidebar pour comparer plusieurs communes")
+                st.info("👈 Sélectionnez des communes à comparer dans la sidebar")
                 
-                # Comparaison avec la moyenne des communes
-                st.markdown("### 📊 Positionnement par rapport aux autres communes")
+                # Comparaison avec les moyennes régionales
+                st.markdown("### 📊 Positionnement régional")
                 
-                # Calcul des moyennes
-                all_data = []
-                for commune in self.communes_config.keys():
-                    df_comm, _ = self.generate_financial_data(commune)
-                    df_comm_filtered = df_comm[(df_comm['Annee'] >= year_range[0]) & 
-                                              (df_comm['Annee'] <= year_range[1])]
-                    all_data.append(df_comm_filtered)
+                region_data = []
+                for commune in filtered_communes:
+                    df, config = self.generate_financial_data(commune)
+                    df_filtered = df[(df['Annee'] >= year_range[0]) & (df['Annee'] <= year_range[1])]
+                    last_row = df_filtered.iloc[-1]
+                    
+                    region_data.append({
+                        'Commune': commune,
+                        'Région': config['region'],
+                        'Dette': last_row['Dette_Totale'],
+                        'Capacité': last_row['Capacite_Remboursement']
+                    })
                 
-                # Indicateurs comparatifs
-                col1, col2, col3 = st.columns(3)
+                region_df = pd.DataFrame(region_data)
+                regional_avg = region_df.groupby('Région').agg({
+                    'Dette': 'mean',
+                    'Capacité': 'mean'
+                }).reset_index()
                 
-                with col1:
-                    avg_debt_all = np.mean([df['Dette_Totale'].mean() for df in all_data])
-                    current_debt = df_filtered['Dette_Totale'].mean()
-                    diff = ((current_debt / avg_debt_all) - 1) * 100
-                    st.metric("Dette vs moyenne communes", 
-                             f"{current_debt:.1f} M€", 
-                             f"{diff:+.1f}%")
-                
-                with col2:
-                    avg_capacity_all = np.mean([df['Capacite_Remboursement'].mean() for df in all_data])
-                    current_capacity = df_filtered['Capacite_Remboursement'].mean()
-                    diff_cap = current_capacity - avg_capacity_all
-                    st.metric("Capacité vs moyenne", 
-                             f"{current_capacity:.2f}", 
-                             f"{diff_cap:+.2f}")
-                
-                with col3:
-                    avg_ratio_all = np.mean([df['Taux_Endettement'].mean() for df in all_data]) * 100
-                    current_ratio = df_filtered['Taux_Endettement'].mean() * 100
-                    diff_ratio = current_ratio - avg_ratio_all
-                    st.metric("Taux endettement vs moyenne", 
-                             f"{current_ratio:.1f}%", 
-                             f"{diff_ratio:+.1f}%")
+                fig = px.box(region_df, x='Région', y='Dette',
+                            title='Distribution de la dette par région',
+                            color='Région')
+                st.plotly_chart(fig, use_container_width=True)
         
         with tab4:
-            # Recommandations et contexte
-            col1, col2 = st.columns([2, 1])
+            # Classements
+            self.create_ranking_analysis(year_range)
+            
+            # Analyse par région
+            st.markdown("### 🗺️ Performance par région")
+            
+            region_performance = []
+            for region in selected_region:
+                region_communes = [c for c in filtered_communes 
+                                 if self.communes_config[c]['region'] == region]
+                if region_communes:
+                    total_debt = sum([self.generate_financial_data(c)[0]['Dette_Totale'].iloc[-1] 
+                                    for c in region_communes])
+                    avg_capacity = np.mean([self.generate_financial_data(c)[0]['Capacite_Remboursement'].iloc[-1] 
+                                          for c in region_communes])
+                    
+                    region_performance.append({
+                        'Région': region,
+                        'Nombre Communes': len(region_communes),
+                        'Dette Totale': total_debt,
+                        'Capacité Moyenne': avg_capacity,
+                        'Dette par Commune': total_debt / len(region_communes)
+                    })
+            
+            if region_performance:
+                perf_df = pd.DataFrame(region_performance)
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    fig = px.bar(perf_df, x='Région', y='Dette Totale',
+                                title='Dette totale par région (M€)')
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                with col2:
+                    fig = px.bar(perf_df, x='Région', y='Capacité Moyenne',
+                                title='Capacité de remboursement moyenne')
+                    st.plotly_chart(fig, use_container_width=True)
+        
+        with tab5:
+            # Recommandations
+            if selected_commune in filtered_communes:
+                df, config = self.generate_financial_data(selected_commune)
+                df_filtered = df[(df['Annee'] >= year_range[0]) & (df['Annee'] <= year_range[1])]
+                self.create_recommandations(df_filtered, config)
+            else:
+                st.info("Sélectionnez une commune pour voir les recommandations spécifiques.")
+            
+            # Recommandations générales
+            st.markdown("---")
+            st.markdown("### 🌟 Bonnes pratiques pour toutes les communes")
+            
+            col1, col2 = st.columns(2)
             
             with col1:
-                self.create_recommandations(df_filtered, config)
+                st.markdown("**📊 Transparence financière**")
+                st.markdown("""
+                - Publication des comptes administratifs
+                - Indicateurs de performance accessibles
+                - Rapports annuels de gestion
+                - Portail open data financier
+                """)
+                
+                st.markdown("**🤝 Coopération intercommunale**")
+                st.markdown("""
+                - Mutualisation des services
+                - Achats groupés
+                - Partage d'expertise
+                - Projets communs
+                """)
             
             with col2:
-                self.create_historical_context()
-            
-            # Résumé exécutif
-            st.markdown("---")
-            st.markdown("### 🎯 Résumé exécutif")
-            
-            summary_cols = st.columns(3)
-            
-            with summary_cols[0]:
-                st.markdown("#### 📈 Tendances")
-                st.markdown(f"- Dette totale: **{df_filtered['Dette_Totale'].iloc[-1]:.1f} M€**")
-                st.markdown(f"- Évolution: **{((df_filtered['Dette_Totale'].iloc[-1]/df_filtered['Dette_Totale'].iloc[0])-1)*100:+.1f}%**")
-            
-            with summary_cols[1]:
-                st.markdown("#### ⚖️ Équilibre")
-                st.markdown(f"- Recettes/dépenses: **{(df_filtered['Recettes_Totales'].mean()/df_filtered['Depenses_Totales'].mean()):.2f}**")
-                st.markdown(f"- Épargne brute: **{df_filtered['Epargne_Brute'].mean():.1f} M€**")
-            
-            with summary_cols[2]:
-                st.markdown("#### 🎯 Priorités")
-                capacity = df_filtered['Capacite_Remboursement'].iloc[-1]
-                if capacity < 1.2:
-                    st.markdown("**Maîtrise de la dette**")
-                elif capacity < 2.0:
-                    st.markdown("**Consolidation budgétaire**")
-                else:
-                    st.markdown("**Investissements structurants**")
+                st.markdown("**🌿 Développement durable**")
+                st.markdown("""
+                - Budget vert
+                - Investissements écologiques
+                - Adaptation climatique
+                - Économie circulaire
+                """)
+                
+                st.markdown("**💼 Attractivité économique**")
+                st.markdown("""
+                - Soutien aux entreprises locales
+                - Développement touristique
+                - Infrastructures numériques
+                - Formation professionnelle
+                """)
+        
+        # Pied de page
+        st.markdown("---")
+        col1, col2, col3 = st.columns(3)
+        with col2:
+            st.markdown("""
+            **Dashboard développé pour l'analyse stratégique des finances communales réunionnaises**  
+            *Données simulées - Version 1.0 - Février 2024*
+            """)
 
 # Exécution du dashboard
 if __name__ == "__main__":
