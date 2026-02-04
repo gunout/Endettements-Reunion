@@ -1,10 +1,17 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
 import plotly.express as px
 import plotly.graph_objects as go
-import os
+from datetime import datetime
 import warnings
+import chardet
+import io
+import os
+import re
+
 warnings.filterwarnings('ignore')
 
 # Configuration de la page
@@ -37,626 +44,489 @@ st.markdown("""
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         margin-bottom: 20px;
     }
+    .stAlert {
+        border-radius: 10px;
+    }
+    .highlight-box {
+        background-color: #e9f7ef;
+        border-left: 5px solid #2A9D8F;
+        padding: 15px;
+        border-radius: 5px;
+        margin: 15px 0;
+    }
+    .warning-box {
+        background-color: #fff3cd;
+        border-left: 5px solid #ffc107;
+        padding: 15px;
+        border-radius: 5px;
+        margin: 15px 0;
+    }
+    .small-metric {
+        font-size: 0.9rem;
+    }
+    .region-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 10px;
+        padding: 15px;
+        margin: 10px 0;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 class ReunionFinancialDashboard:
     def __init__(self):
-        self.colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#F9A602', '#6A0572']
+        self.colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#F9A602', '#6A0572', 
+                      '#AB83A1', '#5CAB7D', '#2A9D8F', '#E76F51', '#264653',
+                      '#E9C46A', '#2A9D8F', '#E63946', '#457B9D', '#1D3557',
+                      '#A8DADC', '#F4A261', '#2A9D8F', '#E76F51', '#264653',
+                      '#588157', '#3A5A40', '#A3B18A', '#DAD7CD']
         
         # Initialiser les données
         self.data = pd.DataFrame()
         self.communes_config = {}
         
-        # Essayer de charger le fichier local
-        self.load_local_file()
-    
-    def load_local_file(self):
-        """Charge le fichier CSV local depuis le dépôt GitHub"""
-        try:
-            # Chemin du fichier dans votre dépôt
-            file_path = "ofgl-base-communes.csv"
-            
-            # Vérifier si le fichier existe
-            if os.path.exists(file_path):
-                st.info(f"Chargement du fichier local: {file_path}")
+    def _find_column(self, keywords):
+        """Trouve une colonne dans le dataframe basée sur une liste de mots-clés"""
+        if self.data.empty:
+            return None
+        for col in self.data.columns:
+            col_lower = str(col).lower()
+            for keyword in keywords:
+                if keyword in col_lower:
+                    return col
+        return None
+
+    def _clean_numeric_column(self, col_name):
+        """Nettoie et convertit une colonne en numérique (gestion format français)"""
+        if col_name and col_name in self.data.columns:
+            # Remplacer les espaces (séparateur de milliers) et virgules (décimales)
+            # On gère les cas où le séparateur de milliers est un espace ou rien, et la décimale est une virgule
+            self.data[col_name] = self.data[col_name].astype(str).str.replace(' ', '', regex=False)
+            self.data[col_name] = self.data[col_name].str.replace(',', '.', regex=False)
+            self.data[col_name] = pd.to_numeric(self.data[col_name], errors='coerce')
+            return True
+        return False
+
+    def _load_data(self):
+        """Charge les données via fichier local ou upload"""
+        st.sidebar.markdown("### 📁 Chargement des données")
+        
+        # Nom du fichier attendu dans le même dossier
+        csv_filename = "ofgl-base-communes.csv"
+        
+        file_source = None
+        
+        # 1. Vérifier si le fichier existe localement
+        if os.path.exists(csv_filename):
+            try:
+                file_source = open(csv_filename, 'rb')
+                st.sidebar.success(f"✅ Fichier local '{csv_filename}' détecté !")
+            except Exception as e:
+                st.sidebar.error(f"Erreur lecture fichier local: {str(e)}")
+        
+        # 2. Option d'upload
+        uploaded_file = st.sidebar.file_uploader(
+            "Ou téléchargez un autre fichier CSV",
+            type=['csv', 'txt'],
+            help="Le fichier doit contenir les données financières des communes"
+        )
+        
+        if uploaded_file is not None:
+            file_source = uploaded_file
+            st.sidebar.info("📄 Utilisation du fichier uploadé")
+        
+        # 3. Traitement des données
+        if file_source is not None:
+            try:
+                raw_data = file_source.read()
+                result = chardet.detect(raw_data)
+                encoding = result['encoding']
+                file_source.seek(0)
                 
-                # Essayer différents encodages
-                encodings = ['utf-8', 'latin-1', 'iso-8859-1', 'cp1252', 'utf-8-sig']
-                
-                for encoding in encodings:
+                data_loaded = False
+                # Essai avec séparateurs courants et gestion des nombres français
+                for sep in [';', ',', '\t', '|']:
                     try:
-                        self.data = pd.read_csv(file_path, sep=';', encoding=encoding, low_memory=False)
-                        st.success(f"✅ Fichier chargé avec succès! {len(self.data)} lignes, {len(self.data.columns)} colonnes")
-                        break
-                    except UnicodeDecodeError:
+                        df = pd.read_csv(file_source, sep=sep, encoding=encoding, low_memory=False)
+                        file_source.seek(0)
+                        
+                        if len(df.columns) >= 5:
+                            self.data = df
+                            # Nettoyage immédiat des noms de colonnes
+                            self.data.columns = [str(col).strip() for col in self.data.columns]
+                            data_loaded = True
+                            st.sidebar.success(f"✅ Données chargées ({len(df)} lignes)")
+                            break
+                    except Exception:
+                        file_source.seek(0)
                         continue
-                    except Exception as e:
-                        st.warning(f"Erreur avec {encoding}: {str(e)}")
-                        continue
                 
-                # Si toujours vide, essayer avec auto-détection
-                if self.data.empty:
-                    try:
-                        self.data = pd.read_csv(file_path, sep=None, engine='python', on_bad_lines='skip')
-                        st.success(f"✅ Fichier chargé avec auto-détection")
-                    except Exception as e:
-                        st.error(f"Impossible de charger le fichier: {str(e)}")
-            
-            else:
-                st.warning(f"Fichier non trouvé: {file_path}")
+                if not data_loaded:
+                    st.sidebar.error("Impossible de lire le fichier CSV. Vérifiez le format.")
                 
-        except Exception as e:
-            st.error(f"Erreur lors du chargement: {str(e)}")
-    
-    def analyze_data_structure(self):
-        """Analyse la structure des données"""
-        if self.data.empty:
-            return
-        
-        # Afficher les informations de base
-        st.sidebar.markdown("### 📊 Structure des données")
-        st.sidebar.write(f"**Lignes:** {len(self.data):,}")
-        st.sidebar.write(f"**Colonnes:** {len(self.data.columns)}")
-        
-        # Afficher les premières colonnes
-        st.sidebar.write("**Colonnes disponibles:**")
-        for i, col in enumerate(self.data.columns[:10]):  # Afficher les 10 premières
-            st.sidebar.write(f"- {col}")
-        
-        if len(self.data.columns) > 10:
-            st.sidebar.write(f"... et {len(self.data.columns) - 10} autres")
-        
-        # Afficher un aperçu des données
-        with st.expander("👁️ Aperçu des données brutes"):
-            st.write("5 premières lignes:")
-            st.dataframe(self.data.head())
-            
-            st.write("Types de données:")
-            st.dataframe(pd.DataFrame({
-                'Colonne': self.data.columns,
-                'Type': self.data.dtypes.astype(str),
-                'Non-null': self.data.count().values
-            }))
-    
-    def filter_reunion_data(self):
-        """Filtre les données pour garder uniquement La Réunion"""
-        if self.data.empty:
-            return
-        
-        try:
-            # Filtrer par département 974 (La Réunion)
-            dept_cols = [col for col in self.data.columns if 'département' in str(col).lower() or 'departement' in str(col).lower()]
-            
-            if dept_cols:
-                dept_col = dept_cols[0]
-                # Chercher les lignes avec 974
-                mask = self.data[dept_col].astype(str).str.contains('974', na=False)
-                if mask.any():
-                    before = len(self.data)
-                    self.data = self.data[mask].copy()
-                    st.success(f"✅ Filtrage La Réunion: {len(self.data)}/{before} lignes")
-                else:
-                    st.warning("Aucune donnée avec département 974 trouvée")
-            else:
-                st.warning("Colonne département non trouvée, pas de filtrage")
+                # Nettoyage post-chargement des colonnes numériques probables
+                col_montant = self._find_column(['montant', 'solde', 'valeur'])
+                if col_montant:
+                    self._clean_numeric_column(col_montant)
                 
-        except Exception as e:
-            st.warning(f"Erreur lors du filtrage: {str(e)}")
-    
-    def extract_communes_info(self):
-        """Extrait les informations des communes"""
-        if self.data.empty:
-            return
-        
-        # Chercher la colonne des noms de commune
-        commune_cols = [col for col in self.data.columns if 'commune' in str(col).lower()]
-        
-        if commune_cols:
-            commune_col = commune_cols[0]
-            communes = self.data[commune_col].unique()
-            
-            st.sidebar.markdown("### 🏘️ Communes trouvées")
-            st.sidebar.write(f"**Nombre de communes:** {len(communes)}")
-            
-            # Afficher les communes
-            for i, commune in enumerate(communes[:15]):  # Limiter à 15 pour éviter trop d'affichage
-                st.sidebar.write(f"- {commune}")
-            
-            if len(communes) > 15:
-                st.sidebar.write(f"... et {len(communes) - 15} autres")
-            
-            # Créer la configuration des communes
-            self.create_communes_config(communes, commune_col)
-            
+                col_pop = self._find_column(['population'])
+                if col_pop:
+                    self._clean_numeric_column(col_pop)
+
+                col_annee = self._find_column(['exercice', 'annee', 'année'])
+                if col_annee:
+                     self.data[col_annee] = pd.to_numeric(self.data[col_annee], errors='coerce')
+
+                if not self.data.empty:
+                    self.communes_config = self._extract_communes_config()
+                    
+                    with st.sidebar.expander("Aperçu des données"):
+                        st.dataframe(self.data.head(3))
+
+                if os.path.exists(csv_filename) and uploaded_file is None:
+                    file_source.close()
+
+            except Exception as e:
+                st.sidebar.error(f"Erreur critique: {str(e)}")
+                import traceback
+                st.sidebar.text(traceback.format_exc())
         else:
-            st.warning("Colonne des communes non trouvée")
+            st.sidebar.info("📝 Mode démo. Fichier 'ofgl-base-communes.csv' introuvable.")
+            self._create_sample_data()
     
-    def create_communes_config(self, communes, commune_col):
-        """Crée la configuration des communes"""
-        self.communes_config = {}
+    def _create_sample_data(self):
+        """Crée des données d'exemple pour la démonstration"""
+        st.info("Mode démonstration")
+        sample_data = []
+        communes = ['Saint-Denis', 'Saint-Paul', 'Saint-Pierre', 'Le Tampon', 'Saint-Louis']
+        for i, commune in enumerate(communes):
+            for year in [2017, 2018, 2019, 2020]:
+                sample_data.append({
+                    'Exercice': year,
+                    'Nom 2024 Commune': commune,
+                    'Agrégat': 'Recettes totales hors emprunts',
+                    'Type de budget': 'Budget principal',
+                    'Montant': np.random.uniform(10000000, 50000000),
+                    'Population totale': np.random.randint(5000, 150000),
+                    'Nom 2024 Région': 'La Réunion',
+                    'Code Insee 2024 Département': '974',
+                })
+        self.data = pd.DataFrame(sample_data)
         
-        for commune in communes:
-            if pd.isna(commune):
-                continue
-                
-            commune_name = str(commune).strip()
+        # S'assurer que le montant est numérique pour la démo
+        self._clean_numeric_column('Montant')
+        self.communes_config = self._extract_communes_config()
+    
+    def _extract_communes_config(self):
+        """Extrait la configuration des communes depuis les données"""
+        if self.data.empty:
+            return {}
+        
+        # Recherche dynamique des colonnes
+        commune_col = self._find_column(['commune', 'nom', 'libellé'])
+        region_col = self._find_column(['region', 'région'])
+        pop_col = self._find_column(['population'])
+        
+        if not commune_col:
+            st.error("Colonne 'Commune' introuvable. Vérifiez votre CSV.")
+            return {}
+
+        communes_list = self.data[commune_col].unique()
+        communes_config = {}
+        
+        for commune in communes_list:
+            if pd.isna(commune): continue
             
-            # Filtrer les données de cette commune
             commune_data = self.data[self.data[commune_col] == commune]
+            if commune_data.empty: continue
             
-            # Population (si disponible)
-            pop_cols = [col for col in commune_data.columns if 'population' in str(col).lower()]
+            # Population
             population = 0
-            if pop_cols:
-                population = commune_data[pop_cols[0]].mean() if not commune_data[pop_cols[0]].isna().all() else 0
+            if pop_col:
+                population_series = commune_data[pop_col].dropna()
+                population = population_series.mean() if not population_series.empty else 0
             
-            # Configuration
-            self.communes_config[commune_name] = {
-                'population': int(population),
-                'type': self.get_commune_type(commune_name),
-                'color': self.get_commune_color(commune_name),
-                'region': 'La Réunion',
-                'data': commune_data
+            # Région
+            region = 'La Réunion'
+            if region_col and not commune_data[region_col].empty:
+                region = commune_data[region_col].iloc[0]
+
+            communes_config[commune] = {
+                "population_base": population,
+                "budget_base": self._estimate_budget(commune_data),
+                "type": self._determine_commune_type(commune),
+                "specialites": self._determine_specialties(str(commune), commune_data),
+                "endettement_base": 0,
+                "fiscalite_base": 0.35,
+                "couleur": self._get_commune_color(str(commune)),
+                "region": region,
+                "arrondissement": self._get_arrondissement(str(commune)),
+                "intercommunalite": "Inconnue"
             }
+        
+        return communes_config
+
+    def _determine_commune_type(self, commune_name):
+        return "urbaine" # Simplifié pour la démo
     
-    def get_commune_type(self, commune_name):
-        """Détermine le type de commune"""
-        commune_lower = commune_name.lower()
+    def _estimate_budget(self, commune_data):
+        agregat_col = self._find_column(['agregat', 'agregat', 'nomenclature'])
+        montant_col = self._find_column(['montant', 'solde'])
         
-        types = {
-            'capitale': ['saint-denis'],
-            'grande_ville': ['saint-paul', 'saint-pierre', 'le tampon'],
-            'ville_moyenne': ['saint-louis', 'saint-leu', 'le port', 'la possession', 'saint-andré'],
-            'petite_ville': ['saint-benoît', 'saint-joseph', 'sainte-marie', 'sainte-suzanne'],
-            'commune_rurale': ['saint-philippe', 'les avirons', 'entre-deux', "l'étang-salé", 'petite-île',
-                              'la plaine-des-palmistes', 'bras-panon', 'cilaos', 'salazie', 
-                              'les trois-bassins', 'sainte-rose']
-        }
+        if not agregat_col or not montant_col:
+            # Si on ne trouve pas les colonnes, on prend la somme de tout pour estimer
+            if montant_col:
+                return commune_data[montant_col].sum() / 1000000
+            return 0
+
+        recettes_mask = commune_data[agregat_col].astype(str).str.contains('recettes totales', case=False, na=False)
+        recettes_data = commune_data[recettes_mask]
         
-        for type_name, communes_list in types.items():
-            for commune in communes_list:
-                if commune in commune_lower:
-                    return type_name
-        
-        return 'commune_rurale'
-    
-    def get_commune_color(self, commune_name):
-        """Attribue une couleur à la commune"""
-        commune_lower = commune_name.lower()
-        
-        # Couleurs basées sur le type
-        if 'saint-denis' in commune_lower:
-            return '#264653'  # Bleu foncé - capitale
-        elif 'saint-paul' in commune_lower or 'saint-pierre' in commune_lower:
-            return '#2A9D8F'  # Turquoise - grandes villes
-        elif 'le tampon' in commune_lower or 'saint-louis' in commune_lower:
-            return '#E76F51'  # Orange - villes moyennes
-        else:
-            colors = ['#F9A602', '#6A0572', '#AB83A1', '#5CAB7D', '#45B7D1']
-            return colors[hash(commune_name) % len(colors)]
-    
-    def get_financial_data(self, commune_name):
-        """Extrait les données financières d'une commune"""
-        if commune_name not in self.communes_config:
-            return pd.DataFrame()
-        
-        commune_data = self.communes_config[commune_name]['data']
-        
-        # Chercher les agrégats financiers
-        agregat_cols = [col for col in commune_data.columns if 'agrégat' in str(col).lower() or 'agregat' in str(col).lower()]
-        montant_cols = [col for col in commune_data.columns if 'montant' in str(col).lower()]
-        
-        if not agregat_cols or not montant_cols:
-            return pd.DataFrame()
-        
-        agregat_col = agregat_cols[0]
-        montant_col = montant_cols[0]
-        
-        # Chercher les années
-        year_cols = [col for col in commune_data.columns if 'exercice' in str(col).lower() or 'annee' in str(col).lower()]
-        if year_cols:
-            year_col = year_cols[0]
-            years = commune_data[year_col].unique()
-        else:
-            years = [2017]  # Valeur par défaut
-        
-        financial_data = []
-        
-        for year in years:
-            year_data = commune_data[commune_data[year_col] == year] if year_cols else commune_data
-            
-            # Calculer les indicateurs
-            recettes = self.calculate_indicator(year_data, agregat_col, montant_col, 'recettes totales')
-            epargne = self.calculate_indicator(year_data, agregat_col, montant_col, 'épargne brute')
-            impots = self.calculate_indicator(year_data, agregat_col, montant_col, 'impôts|taxes')
-            
-            financial_data.append({
-                'Annee': year,
-                'Commune': commune_name,
-                'Population': self.communes_config[commune_name]['population'],
-                'Recettes_Totales': recettes,
-                'Epargne_Brute': epargne,
-                'Impots_Locaux': impots,
-                'Dette_Totale': recettes * 1.2,  # Estimation
-                'Ratio_Dette_Recettes': 1.2,  # Estimation
-                'Capacite_Remboursement': 1.5 + (epargne / 10)
-            })
-        
-        return pd.DataFrame(financial_data)
-    
-    def calculate_indicator(self, data, agregat_col, montant_col, pattern):
-        """Calcule un indicateur financier"""
-        try:
-            mask = data[agregat_col].astype(str).str.contains(pattern, case=False, na=False)
-            indicator_data = data[mask]
-            
-            if not indicator_data.empty:
-                return indicator_data[montant_col].sum() / 1000000  # Millions d'euros
-        except:
-            pass
-        
+        if not recettes_data.empty:
+            return recettes_data[montant_col].sum() / 1000000
         return 0
     
-    def create_header(self):
-        """Crée l'en-tête"""
-        st.markdown('<h1 class="main-header">🏝️ Analyse Financière des Communes de La Réunion</h1>', 
-                   unsafe_allow_html=True)
+    def _determine_specialties(self, commune_name, commune_data):
+        # Logique simplifiée
+        return ['services publics']
+
+    def _get_commune_color(self, commune_name):
+        return "#2A9D8F"
+    
+    def _get_arrondissement(self, commune_name):
+        return "La Réunion"
+
+    def get_years_available(self):
+        year_col = self._find_column(['exercice', 'annee', 'année'])
+        if year_col:
+            years = sorted(self.data[year_col].dropna().unique())
+            return [int(y) for y in years if y > 1900]
+        return [2023] # Par défaut
+
+    def prepare_commune_financial_data(self, commune_name):
+        """Prépare les données financières d'une commune spécifique"""
+        if self.data.empty:
+            return pd.DataFrame(), {}
         
+        commune_col = self._find_column(['commune', 'nom', 'libellé'])
+        year_col = self._find_column(['exercice', 'annee', 'année'])
+        agregat_col = self._find_column(['agregat', 'agrégat', 'nomenclature'])
+        montant_col = self._find_column(['montant', 'solde'])
+        pop_col = self._find_column(['population'])
+
+        if not all([commune_col, year_col, agregat_col, montant_col]):
+            st.warning(f"Données incomplètes pour analyser {commune_name}")
+            return pd.DataFrame(), {}
+
+        commune_data = self.data[self.data[commune_col] == commune_name].copy()
+        
+        if commune_data.empty:
+            return pd.DataFrame(), {}
+        
+        financial_metrics = {}
+        years_available = self.get_years_available()
+        
+        for year in years_available:
+            year_data = commune_data[commune_data[year_col] == year]
+            if year_data.empty: continue
+            
+            # Population
+            pop_data = year_data[pop_col].mean() if pop_col and pop_col in year_data.columns else self.communes_config.get(commune_name, {}).get('population_base', 0)
+            
+            # Calculs basés sur les agrégats
+            total_recettes = 0
+            total_epargne = 0
+            total_impots = 0
+            financement = 0
+            
+            # On itère sur les lignes pour sommer par catégorie
+            for _, row in year_data.iterrows():
+                agr = str(row[agregat_col]).lower()
+                mont = row[montant_col] if pd.notna(row[montant_col]) else 0
+                
+                if 'recette' in agr and 'total' in agr:
+                    total_recettes += mont
+                elif 'epargne' in agr and 'brute' in agr:
+                    total_epargne += mont
+                elif 'impot' in agr or 'taxe' in agr:
+                    total_impots += mont
+                elif 'capacite' in agr or 'financement' in agr:
+                    financement += mont
+
+            financial_metrics[year] = {
+                'Annee': year,
+                'Population': pop_data,
+                'Recettes_Totales': total_recettes / 1000000,
+                'Epargne_Brute': total_epargne / 1000000,
+                'Capacite_Financement': financement / 1000000,
+                'Impots_Locaux': total_impots / 1000000,
+                'Dette_Totale': max(0, total_recettes * 0.8) / 1000000, # Estimation si pas de colonne dette
+                'Depenses_Totales': max(0, total_recettes - total_epargne) / 1000000,
+                'Taux_Endettement': 0.5, # Placeholder
+                'Capacite_Remboursement': 1.5 if financement > 0 else 1.0
+            }
+        
+        df = pd.DataFrame.from_dict(financial_metrics, orient='index')
+        df = df.sort_values('Annee')
+        config = self.communes_config.get(commune_name, {})
+        return df, config
+    
+    def create_header(self):
+        st.markdown('<h1 class="main-header">🏝️ Analyse Financière des Communes de La Réunion</h1>', unsafe_allow_html=True)
         if not self.data.empty:
-            st.markdown(f"**{len(self.communes_config)} communes analysées • Données chargées avec succès**")
+            st.markdown(f"<div style='text-align:center'>Analyse basée sur {len(self.communes_config)} communes</div>", unsafe_allow_html=True)
     
     def create_sidebar(self):
-        """Crée la sidebar"""
         with st.sidebar:
-            st.image("https://upload.wikimedia.org/wikipedia/commons/6/66/Flag_of_R%C3%A9union.svg", 
-                    width=200)
+            # Chargement
+            self._load_data()
             
             if self.data.empty:
-                st.error("❌ Aucune donnée chargée")
-                st.info("Vérifiez que le fichier 'ofgl-base-communes.csv' est dans votre dépôt")
-                return None, []
+                st.warning("Aucune donnée chargée.")
+                return None, None, False, [], []
             
-            # Analyser la structure
-            self.analyze_data_structure()
-            self.filter_reunion_data()
-            self.extract_communes_info()
+            st.markdown("---")
+            st.markdown("## 🔧 Paramètres")
             
-            # Sélection de la commune
-            if self.communes_config:
-                st.markdown("## 🔧 Paramètres")
-                
-                commune_options = sorted(list(self.communes_config.keys()))
-                selected_commune = st.selectbox(
-                    "Sélectionnez une commune:",
-                    commune_options,
-                    index=0
+            # Sélection Commune
+            commune_options = sorted(list(self.communes_config.keys()))
+            selected_commune = st.selectbox("Commune à analyser :", commune_options)
+            
+            # Période
+            years = self.get_years_available()
+            year_range = (min(years), max(years))
+            
+            # Options
+            show_advanced = st.checkbox("Afficher les données brutes", value=False)
+            compare_mode = st.checkbox("Mode Comparaison", value=False)
+            
+            compare_communes = []
+            if compare_mode:
+                compare_communes = st.multiselect(
+                    "Communes à comparer :",
+                    [c for c in commune_options if c != selected_commune],
+                    max_selections=4
                 )
-                
-                # Options
-                show_comparison = st.checkbox("Afficher la comparaison", value=False)
-                
-                if show_comparison:
-                    compare_communes = st.multiselect(
-                        "Communes à comparer:",
-                        [c for c in commune_options if c != selected_commune],
-                        max_selections=3
-                    )
-                else:
-                    compare_communes = []
-                
-                return selected_commune, compare_communes
             
-            return None, []
-    
-    def create_overview_tab(self):
-        """Crée l'onglet Vue d'ensemble"""
-        st.markdown("### 📊 Vue d'ensemble")
-        
+            return selected_commune, year_range, show_advanced, compare_communes, []
+
+    def create_commune_overview(self):
+        st.markdown("### 🗺️ Vue d'ensemble des communes")
         if not self.communes_config:
-            st.warning("Aucune donnée de commune disponible")
             return
         
-        # Tableau récapitulatif
         overview_data = []
-        for commune_name, config in self.communes_config.items():
-            financial_data = self.get_financial_data(commune_name)
-            
-            if not financial_data.empty:
-                last_row = financial_data.iloc[-1]
-                
+        for commune in self.communes_config:
+            df, _ = self.prepare_commune_financial_data(commune)
+            if not df.empty:
+                last_row = df.iloc[-1]
                 overview_data.append({
-                    'Commune': commune_name,
-                    'Type': config['type'],
-                    'Population': config['population'],
-                    'Recettes (M€)': round(last_row['Recettes_Totales'], 1),
-                    'Dette (M€)': round(last_row['Dette_Totale'], 1),
-                    'Ratio D/R': round(last_row['Ratio_Dette_Recettes'], 2),
-                    'Capacité': round(last_row['Capacite_Remboursement'], 2)
+                    'Commune': commune,
+                    'Population': int(last_row.get('Population', 0)),
+                    'Recettes (M€)': round(last_row.get('Recettes_Totales', 0), 2),
+                    'Épargne (M€)': round(last_row.get('Epargne_Brute', 0), 2)
                 })
         
         if overview_data:
             df_overview = pd.DataFrame(overview_data)
+            st.dataframe(df_overview, use_container_width=True)
             
-            # Affichage du tableau
-            st.dataframe(
-                df_overview,
-                use_container_width=True,
-                height=400
-            )
-            
-            # Graphiques
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                fig = px.bar(df_overview.sort_values('Population', ascending=False).head(10),
-                            x='Commune', y='Population',
-                            title='Top 10 - Population',
-                            color='Type')
-                st.plotly_chart(fig, use_container_width=True)
-            
-            with col2:
-                fig = px.bar(df_overview.sort_values('Dette (M€)', ascending=False).head(10),
-                            x='Commune', y='Dette (M€)',
-                            title='Top 10 - Dette',
-                            color='Type')
-                st.plotly_chart(fig, use_container_width=True)
-    
-    def create_analysis_tab(self, commune_name):
-        """Crée l'onglet Analyse"""
-        if not commune_name:
-            st.info("Sélectionnez une commune dans la sidebar")
-            return
-        
+            # Graphique simple
+            fig = px.bar(df_overview.sort_values('Recettes (M€)', ascending=False).head(10), 
+                         x='Recettes (M€)', y='Commune', orientation='h', color='Recettes (M€)',
+                         title='Top 10 Recettes Totales')
+            st.plotly_chart(fig, use_container_width=True)
+
+    def create_summary_metrics(self, df, config, commune_name):
         st.markdown(f'<h2 class="commune-header">🏙️ {commune_name}</h2>', unsafe_allow_html=True)
-        
-        financial_data = self.get_financial_data(commune_name)
-        
-        if financial_data.empty:
-            st.warning(f"Aucune donnée financière pour {commune_name}")
+        if df.empty:
+            st.warning("Pas de données disponibles.")
             return
-        
-        config = self.communes_config[commune_name]
-        last_row = financial_data.iloc[-1]
-        
-        # Métriques
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.metric("Population", f"{config['population']:,}")
-            st.metric("Type de commune", config['type'].replace('_', ' ').title())
-        
-        with col2:
-            st.metric("Recettes totales", f"{last_row['Recettes_Totales']:.1f} M€")
-            st.metric("Épargne brute", f"{last_row['Epargne_Brute']:.2f} M€")
-        
-        with col3:
-            st.metric("Dette estimée", f"{last_row['Dette_Totale']:.1f} M€")
-            st.metric("Ratio dette/recettes", f"{last_row['Ratio_Dette_Recettes']:.2f}")
-        
-        # Graphiques
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            fig = go.Figure(data=[
-                go.Bar(name='Recettes', x=['M€'], y=[last_row['Recettes_Totales']], marker_color='#2A9D8F'),
-                go.Bar(name='Dette', x=['M€'], y=[last_row['Dette_Totale']], marker_color='#E76F51'),
-                go.Bar(name='Épargne', x=['M€'], y=[last_row['Epargne_Brute']], marker_color='#F9A602')
-            ])
-            fig.update_layout(title='Indicateurs financiers', barmode='group')
-            st.plotly_chart(fig, use_container_width=True)
-        
-        with col2:
-            # Données brutes de la commune
-            commune_data = config['data']
-            st.markdown("**Données disponibles:**")
-            st.write(f"- {len(commune_data)} lignes de données")
-            
-            # Afficher les agrégats disponibles
-            agregat_cols = [col for col in commune_data.columns if 'agrégat' in str(col).lower()]
-            if agregat_cols:
-                agregats = commune_data[agregat_cols[0]].unique()
-                st.write(f"- {len(agregats)} types d'agrégats financiers")
-                
-                with st.expander("Voir les agrégats"):
-                    for agregat in agregats[:20]:  # Limiter à 20
-                        st.write(f"  - {agregat}")
-    
-    def create_comparison_tab(self, communes):
-        """Crée l'onglet Comparaison"""
+
+        last = df.iloc[-1]
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.metric("Population", f"{last['Population']:,.0f}")
+            st.metric("Recettes (M€)", f"{last['Recettes_Totales']:.2f}")
+        with c2:
+            st.metric("Épargne (M€)", f"{last['Epargne_Brute']:.2f}")
+            st.metric("Impôts (M€)", f"{last['Impots_Locaux']:.2f}")
+        with c3:
+            st.metric("Dette (M€)", f"{last['Dette_Totale']:.2f}")
+            st.metric("Capacité Fin.", f"{last['Capacite_Financement']:.2f} M€")
+
+        # Graphique évolution
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=df['Annee'], y=df['Recettes_Totales'], mode='lines+markers', name='Recettes'))
+        fig.add_trace(go.Scatter(x=df['Annee'], y=df['Depenses_Totales'], mode='lines+markers', name='Dépenses'))
+        fig.update_layout(title="Évolution Recettes / Dépenses", xaxis_title="Année", yaxis_title="Millions d'Euros")
+        st.plotly_chart(fig, use_container_width=True)
+
+    def create_comparative_analysis(self, communes):
+        st.markdown("### 📊 Comparaison inter-communes")
         if len(communes) < 2:
-            st.info("Sélectionnez au moins 2 communes à comparer")
+            st.info("Sélectionnez au moins 2 communes dans la sidebar pour comparer.")
             return
         
-        st.markdown("### 🔄 Comparaison entre communes")
-        
-        comparison_data = []
-        for commune in communes:
-            financial_data = self.get_financial_data(commune)
-            if not financial_data.empty:
-                last_row = financial_data.iloc[-1]
-                comparison_data.append({
-                    'Commune': commune,
-                    'Population': last_row['Population'],
-                    'Recettes (M€)': last_row['Recettes_Totales'],
-                    'Dette (M€)': last_row['Dette_Totale'],
-                    'Dette/Hab (k€)': (last_row['Dette_Totale'] * 1000) / last_row['Population'] if last_row['Population'] > 0 else 0,
-                    'Ratio D/R': last_row['Ratio_Dette_Recettes']
+        comp_data = []
+        for c in communes:
+            df, _ = self.prepare_commune_financial_data(c)
+            if not df.empty:
+                l = df.iloc[-1]
+                comp_data.append({
+                    'Commune': c,
+                    'Recettes/Hab': (l['Recettes_Totales'] * 1_000_000) / l['Population'] if l['Population'] > 0 else 0,
+                    'Dette/Hab': (l['Dette_Totale'] * 1_000_000) / l['Population'] if l['Population'] > 0 else 0,
+                    'Épargne (M€)': l['Epargne_Brute']
                 })
         
-        if comparison_data:
-            df_comparison = pd.DataFrame(comparison_data)
-            
-            # Graphique
-            fig = px.bar(df_comparison, 
-                        x='Commune', 
-                        y=['Recettes (M€)', 'Dette (M€)'],
-                        title='Comparaison financière',
-                        barmode='group')
-            st.plotly_chart(fig, use_container_width=True)
-            
-            # Tableau
-            st.dataframe(df_comparison.round(2), use_container_width=True)
-    
-    def create_ranking_tab(self):
-        """Crée l'onglet Classement"""
-        st.markdown("### 🏆 Classement des communes")
+        df_comp = pd.DataFrame(comp_data)
+        st.dataframe(df_comp, use_container_width=True)
         
-        if not self.communes_config:
-            st.warning("Aucune donnée disponible")
-            return
-        
-        ranking_data = []
-        for commune_name in self.communes_config:
-            financial_data = self.get_financial_data(commune_name)
-            if not financial_data.empty:
-                last_row = financial_data.iloc[-1]
-                ranking_data.append({
-                    'Commune': commune_name,
-                    'Population': last_row['Population'],
-                    'Dette_par_Habitant': (last_row['Dette_Totale'] * 1000000) / last_row['Population'] if last_row['Population'] > 0 else 0,
-                    'Ratio_Dette_Recettes': last_row['Ratio_Dette_Recettes'],
-                    'Capacite_Remboursement': last_row['Capacite_Remboursement']
-                })
-        
-        if ranking_data:
-            df_ranking = pd.DataFrame(ranking_data)
-            
-            # Sélection de l'indicateur
-            ranking_metric = st.selectbox(
-                "Classer par:",
-                ['Dette_par_Habitant', 'Ratio_Dette_Recettes', 'Capacite_Remboursement'],
-                index=0
-            )
-            
-            ascending = ranking_metric != 'Capacite_Remboursement'
-            df_sorted = df_ranking.sort_values(ranking_metric, ascending=ascending)
-            df_sorted['Rang'] = range(1, len(df_sorted) + 1)
-            
-            # Affichage
-            st.dataframe(
-                df_sorted[['Rang', 'Commune', ranking_metric]].head(10),
-                use_container_width=True
-            )
-            
-            # Graphique
-            fig = px.bar(df_sorted.head(10), 
-                        x=ranking_metric, 
-                        y='Commune',
-                        orientation='h',
-                        title=f'Top 10 - {ranking_metric.replace("_", " ")}')
-            st.plotly_chart(fig, use_container_width=True)
-    
-    def create_data_explorer_tab(self):
-        """Crée l'onglet Explorateur de données"""
-        st.markdown("### 🔍 Explorateur de données")
-        
-        if self.data.empty:
-            st.warning("Aucune donnée à explorer")
-            return
-        
-        # Filtres
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            rows_to_show = st.slider("Nombre de lignes à afficher", 10, 1000, 100)
-        
-        with col2:
-            show_columns = st.multiselect(
-                "Colonnes à afficher",
-                self.data.columns.tolist(),
-                default=self.data.columns[:10].tolist() if len(self.data.columns) > 10 else self.data.columns.tolist()
-            )
-        
-        # Aperçu des données
-        st.dataframe(
-            self.data[show_columns].head(rows_to_show) if show_columns else self.data.head(rows_to_show),
-            use_container_width=True,
-            height=400
-        )
-        
-        # Statistiques
-        st.markdown("#### 📈 Statistiques par colonne")
-        
-        col_stats = []
-        for col in self.data.columns:
-            try:
-                col_stats.append({
-                    'Colonne': col,
-                    'Type': str(self.data[col].dtype),
-                    'Valeurs uniques': self.data[col].nunique(),
-                    'Valeurs nulles': self.data[col].isnull().sum(),
-                    'Exemple': str(self.data[col].iloc[0]) if len(self.data) > 0 else ''
-                })
-            except:
-                pass
-        
-        if col_stats:
-            st.dataframe(pd.DataFrame(col_stats), use_container_width=True)
-    
+        fig = px.bar(df_comp, x='Commune', y=['Recettes/Hab', 'Dette/Hab'], barmode='group',
+                     title="Comparaison par habitant (€)")
+        st.plotly_chart(fig, use_container_width=True)
+
+    def create_data_explorer(self):
+        st.markdown("### 🔍 Données Brutes")
+        st.dataframe(self.data, use_container_width=True)
+
     def run_dashboard(self):
-        """Exécute le dashboard"""
         self.create_header()
         
-        # Si pas de données, afficher les instructions
-        if self.data.empty:
-            st.error("""
-            ## ❌ Fichier non trouvé
-            
-            Le fichier 'ofgl-base-communes.csv' n'a pas pu être chargé.
-            
-            **Vérifiez que:**
-            1. Le fichier est bien dans votre dépôt GitHub
-            2. Il s'appelle exactement 'ofgl-base-communes.csv'
-            3. Il est dans le même dossier que ce script
-            
-            **Structure attendue du fichier:**
-            - Format CSV avec séparateur ';'
-            - Colonnes: 'Exercice', 'Nom 2024 Commune', 'Montant', 'Agrégat', etc.
-            - Données des 24 communes de La Réunion (département 974)
-            """)
+        params = self.create_sidebar()
+        
+        # Si pas de données, on arrête
+        if not params or params[0] is None and self.data.empty:
+            st.warning("Veuillez charger un fichier CSV nommé 'ofgl-base-communes.csv' dans le dossier.")
             return
+
+        selected_commune, year_range, show_advanced, compare_communes, _ = params
         
-        # Récupérer les paramètres de la sidebar
-        selected_commune, compare_communes = self.create_sidebar()
-        
-        # Créer les onglets
-        tab_titles = ["📊 Vue d'ensemble", "🏙️ Analyse", "🔄 Comparaisons", "🏆 Classement", "🔍 Données"]
-        
-        if self.data.empty:
-            tab_titles = ["📊 Vue d'ensemble"]  # Un seul onglet si pas de données
-        
-        tabs = st.tabs(tab_titles)
+        # Création des onglets
+        tabs = st.tabs(["🏠 Vue d'ensemble", "🏙️ Analyse Détaillée", "🔄 Comparaisons", "🔍 Données Brutes"])
         
         with tabs[0]:
-            self.create_overview_tab()
-        
-        if len(tabs) > 1:
-            with tabs[1]:
-                self.create_analysis_tab(selected_commune)
-        
-        if len(tabs) > 2:
-            with tabs[2]:
-                self.create_comparison_tab([selected_commune] + compare_communes if selected_commune else [])
-        
-        if len(tabs) > 3:
-            with tabs[3]:
-                self.create_ranking_tab()
-        
-        if len(tabs) > 4:
-            with tabs[4]:
-                self.create_data_explorer_tab()
-        
-        # Footer
-        st.markdown("---")
-        st.markdown("""
-        **Dashboard d'analyse financière des communes de La Réunion**  
-        *Données OFGL - Exercice 2017*
-        
-        *Note: Certains indicateurs sont estimés à partir des données disponibles.*
-        """)
+            self.create_commune_overview()
+            
+        with tabs[1]:
+            if selected_commune:
+                df, config = self.prepare_commune_financial_data(selected_commune)
+                self.create_summary_metrics(df, config, selected_commune)
+            else:
+                st.info("Sélectionnez une commune dans la barre latérale.")
+                
+        with tabs[2]:
+            self.create_comparative_analysis(compare_communes)
+            
+        with tabs[3]:
+            if show_advanced:
+                self.create_data_explorer()
+            else:
+                st.info("Cochez 'Afficher les données brutes' dans la sidebar pour voir cet onglet.")
 
-# Exécution principale
+# Point d'entrée
 if __name__ == "__main__":
     dashboard = ReunionFinancialDashboard()
     dashboard.run_dashboard()
