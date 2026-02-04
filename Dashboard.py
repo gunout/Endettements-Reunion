@@ -92,6 +92,9 @@ class ReunionFinancialDashboard:
             # Nettoyage des noms de colonnes
             df.columns = [col.strip() for col in df.columns]
             
+            # Filtrer uniquement les communes de La Réunion (974)
+            df = df[df['Code Insee 2024 Département'] == '974']
+            
             # Vérification des colonnes clés
             required_columns = ['Exercice', 'Nom 2024 Commune', 'Montant', 'Agrégat', 
                               'Population totale', 'Montant en € par habitant', 'Type de budget']
@@ -99,8 +102,6 @@ class ReunionFinancialDashboard:
             
             if missing_columns:
                 st.warning(f"Colonnes manquantes dans les données: {missing_columns}")
-                # Afficher les colonnes disponibles
-                st.write("Colonnes disponibles:", df.columns.tolist())
             
             return df
             
@@ -113,8 +114,8 @@ class ReunionFinancialDashboard:
         if self.data.empty:
             return {}
         
-        # Obtenir la liste unique des communes
-        communes_list = self.data['Nom 2024 Commune'].unique()
+        # Obtenir la liste unique des communes (uniquement de La Réunion)
+        communes_list = sorted([c for c in self.data['Nom 2024 Commune'].unique() if c != 'La Réunion'])
         
         # Créer un dictionnaire de configuration pour chaque commune
         communes_config = {}
@@ -143,7 +144,8 @@ class ReunionFinancialDashboard:
                 "fiscalite_base": self._estimate_tax_rate(commune_data),
                 "couleur": self._get_commune_color(commune),
                 "region": region_data.get('Nom 2024 Région', 'Inconnue'),
-                "arrondissement": self._get_arrondissement(commune)
+                "arrondissement": self._get_arrondissement(commune),
+                "intercommunalite": region_data.get('Nom 2024 EPCI', 'Inconnue') if not commune_data.empty else 'Inconnue'
             }
         
         return communes_config
@@ -170,15 +172,15 @@ class ReunionFinancialDashboard:
         if commune_data.empty:
             return 0
         
-        # Filtrer les budgets principaux
+        # Filtrer les budgets principaux pour "Recettes totales hors emprunts"
         budget_principal = commune_data[
             (commune_data['Type de budget'] == 'Budget principal') & 
             (commune_data['Agrégat'] == 'Recettes totales hors emprunts')
         ]
         
         if not budget_principal.empty:
-            # Prendre la moyenne des montants
-            return budget_principal['Montant'].mean() / 1000000  # Convertir en millions
+            # Prendre la moyenne des montants (en millions d'euros)
+            return budget_principal['Montant'].mean() / 1000000
         
         return 0
     
@@ -187,7 +189,7 @@ class ReunionFinancialDashboard:
         if commune_data.empty:
             return 0.35
         
-        # Chercher les données d'impôts
+        # Chercher les données d'impôts dans le budget principal
         impots_data = commune_data[
             (commune_data['Agrégat'] == 'Impôts et taxes') & 
             (commune_data['Type de budget'] == 'Budget principal')
@@ -198,13 +200,13 @@ class ReunionFinancialDashboard:
             total_recettes = self._estimate_budget(commune_data) * 1000000
             
             if total_recettes > 0:
-                return total_impots / total_recettes
+                return min(max(total_impots / total_recettes, 0.2), 0.5)
         
         return 0.35
     
     def _determine_specialties(self, commune_name, commune_data):
         """Détermine les spécialités de la commune"""
-        # Liste des spécialités basées sur le nom et les données
+        # Liste des spécialités basées sur le nom
         specialties_map = {
             'Saint-Denis': ['administration', 'services', 'commerce', 'sante', 'education'],
             'Saint-Paul': ['tourisme', 'commerce', 'grands_projets'],
@@ -296,6 +298,14 @@ class ReunionFinancialDashboard:
         
         return arrondissement_map.get(commune_name, "Inconnu")
     
+    def get_years_available(self):
+        """Retourne les années disponibles dans les données"""
+        if self.data.empty:
+            return [2017]
+        
+        years = sorted(self.data['Exercice'].unique())
+        return years if len(years) > 0 else [2017]
+    
     def prepare_commune_financial_data(self, commune_name):
         """Prépare les données financières d'une commune depuis le CSV réel"""
         if self.data.empty:
@@ -305,17 +315,17 @@ class ReunionFinancialDashboard:
         commune_data = self.data[self.data['Nom 2024 Commune'] == commune_name].copy()
         
         if commune_data.empty:
-            st.warning(f"Aucune donnée trouvée pour la commune: {commune_name}")
             return pd.DataFrame(), {}
         
-        # Agréger les données par année et par agrégat
+        # Agréger les données par année
         financial_metrics = {}
+        years_available = self.get_years_available()
         
-        # Obtenir les années disponibles
-        years = commune_data['Exercice'].unique()
-        
-        for year in sorted(years):
+        for year in years_available:
             year_data = commune_data[commune_data['Exercice'] == year]
+            
+            if year_data.empty:
+                continue
             
             # Population
             pop_data = year_data['Population totale'].mean()
@@ -327,16 +337,19 @@ class ReunionFinancialDashboard:
             ]
             recettes = recettes_data['Montant'].sum() / 1000000 if not recettes_data.empty else 0
             
-            # Épargne brute
+            # Épargne brute (somme de tous les budgets)
             epargne_data = year_data[year_data['Agrégat'] == 'Epargne brute']
             epargne_totale = epargne_data['Montant'].sum() / 1000000 if not epargne_data.empty else 0
             
-            # Capacité ou besoin de financement
+            # Capacité ou besoin de financement (somme de tous les budgets)
             financement_data = year_data[year_data['Agrégat'] == 'Capacité ou besoin de financement']
             financement = financement_data['Montant'].sum() / 1000000 if not financement_data.empty else 0
             
-            # Impôts et taxes
-            impots_data = year_data[year_data['Agrégat'] == 'Impôts et taxes']
+            # Impôts et taxes (budget principal seulement)
+            impots_data = year_data[
+                (year_data['Agrégat'] == 'Impôts et taxes') & 
+                (year_data['Type de budget'] == 'Budget principal')
+            ]
             impots = impots_data['Montant'].sum() / 1000000 if not impots_data.empty else 0
             
             # Stocker les métriques
@@ -347,68 +360,82 @@ class ReunionFinancialDashboard:
                 'Epargne_Brute': epargne_totale,
                 'Capacite_Financement': financement,
                 'Impots_Locaux': impots,
-                # Estimations pour les champs manquants
-                'Dette_Totale': self._estimate_debt(commune_name, year, recettes),
-                'Depenses_Totales': recettes - epargne_totale if recettes > 0 else 0,
-                'Dotations_Etat': recettes * 0.4,  # Estimation standard
-                'Taux_Endettement': self._calculate_debt_ratio(commune_name, year, recettes),
-                'Capacite_Remboursement': self._calculate_repayment_capacity(epargne_totale),
-                'Ratio_Endettement_Recettes': self._calculate_debt_revenue_ratio(commune_name, year, recettes)
+                # Estimations basées sur les données réelles
+                'Dette_Totale': self._estimate_debt_from_data(year_data, recettes),
+                'Depenses_Totales': max(recettes - epargne_totale, recettes * 0.9),  # Estimation réaliste
+                'Dotations_Etat': recettes * 0.4 if recettes > 0 else 0,  # Estimation standard pour DOM
+                'Taux_Endettement': self._calculate_debt_ratio_from_data(year_data, recettes),
+                'Capacite_Remboursement': self._calculate_repayment_capacity(epargne_totale, financement),
+                'Ratio_Endettement_Recettes': self._calculate_debt_revenue_ratio(year_data, recettes)
             }
         
         # Créer le DataFrame
-        df = pd.DataFrame.from_dict(financial_metrics, orient='index')
-        df = df.sort_values('Annee')
+        if financial_metrics:
+            df = pd.DataFrame.from_dict(financial_metrics, orient='index')
+            df = df.sort_values('Annee')
+        else:
+            df = pd.DataFrame()
         
         # Récupérer la configuration de la commune
         config = self.communes_config.get(commune_name, {})
         
         return df, config
     
-    def _estimate_debt(self, commune_name, year, revenue):
-        """Estime la dette totale (méthode simplifiée)"""
-        # Estimation basée sur les années
-        base_debt = self.communes_config.get(commune_name, {}).get('budget_base', 50)
+    def _estimate_debt_from_data(self, year_data, revenue):
+        """Estime la dette totale à partir des données disponibles"""
+        if revenue <= 0:
+            return 0
         
-        # Facteur d'évolution par année
-        year_factor = 1 + (year - 2017) * 0.05
+        # Si nous avons des données de capacité de financement, utilisons-les
+        financement_data = year_data[year_data['Agrégat'] == 'Capacité ou besoin de financement']
+        if not financement_data.empty:
+            financement = financement_data['Montant'].sum() / 1000000
+            # Estimation: dette ≈ 5 * besoin de financement annuel
+            return abs(financement) * 5
         
-        # Variation aléatoire réaliste
-        variation = np.random.normal(1, 0.1)
-        
-        return base_debt * year_factor * variation
+        # Sinon, estimation basique
+        return revenue * 1.2  # Dette de 120% des recettes annuelles
     
-    def _calculate_debt_ratio(self, commune_name, year, revenue):
-        """Calcule le taux d'endettement"""
+    def _calculate_debt_ratio_from_data(self, year_data, revenue):
+        """Calcule le taux d'endettement à partir des données"""
         if revenue <= 0:
             return 0.5
         
-        debt = self._estimate_debt(commune_name, year, revenue)
+        # Estimation basée sur l'épargne brute
+        epargne_data = year_data[year_data['Agrégat'] == 'Epargne brute']
+        epargne = epargne_data['Montant'].sum() / 1000000 if not epargne_data.empty else revenue * 0.04
         
-        # Ratio dette/recettes normalisé
-        ratio = debt / (revenue * 3)  # Normalisé pour être réaliste
+        # Ratio plus élevé si épargne faible
+        base_ratio = 0.6
+        if epargne < revenue * 0.03:  # Épargne très faible
+            base_ratio = 0.8
+        elif epargne < revenue * 0.06:  # Épargne faible
+            base_ratio = 0.7
         
-        return min(max(ratio, 0.3), 0.9)  # Borné entre 30% et 90%
+        return min(max(base_ratio, 0.3), 0.9)
     
-    def _calculate_repayment_capacity(self, epargne):
+    def _calculate_repayment_capacity(self, epargne, financement):
         """Calcule la capacité de remboursement"""
         if epargne <= 0:
-            return 1.0
+            return 0.8
         
-        # Capacité basée sur l'épargne brute
-        base_capacity = 1.5 + (epargne / 10)  # Plus d'épargne = meilleure capacité
+        # Si capacité de financement positive, meilleure capacité
+        if financement > 0:
+            base_capacity = 2.0 + (epargne / 5)
+        else:
+            base_capacity = 1.0 + (epargne / 10)
         
-        return max(min(base_capacity, 3.0), 0.5)  # Borné entre 0.5 et 3.0
+        return max(min(base_capacity, 3.0), 0.5)
     
-    def _calculate_debt_revenue_ratio(self, commune_name, year, revenue):
+    def _calculate_debt_revenue_ratio(self, year_data, revenue):
         """Calcule le ratio dette/recettes"""
         if revenue <= 0:
             return 1.0
         
-        debt = self._estimate_debt(commune_name, year, revenue)
+        debt = self._estimate_debt_from_data(year_data, revenue)
         ratio = debt / revenue
         
-        return min(max(ratio, 0.5), 2.5)  # Borné entre 0.5 et 2.5
+        return min(max(ratio, 0.5), 2.5)
     
     def create_header(self):
         """Crée l'en-tête du dashboard"""
@@ -419,7 +446,7 @@ class ReunionFinancialDashboard:
         with col2:
             st.markdown("""
             **Dashboard d'analyse financière basée sur les données OFGL**  
-            *Données réelles - Période: 2017 - Commune de La Réunion (Lot-et-Garonne exclue)*
+            *Données réelles des 24 communes réunionnaises - Exercice 2017*
             """)
     
     def create_sidebar(self):
@@ -450,20 +477,24 @@ class ReunionFinancialDashboard:
             
             # Période d'analyse
             st.markdown("### 📅 Période d'analyse")
-            year_range = st.slider(
-                "Sélectionnez la période:",
-                min_value=2017,
-                max_value=2017,  # Données uniquement pour 2017
-                value=(2017, 2017),
-                disabled=True  # Seulement 2017 disponible
-            )
+            years = self.get_years_available()
             
-            st.info("Données disponibles uniquement pour l'année 2017")
+            if len(years) > 1:
+                year_range = st.slider(
+                    "Sélectionnez la période:",
+                    min_value=min(years),
+                    max_value=max(years),
+                    value=(min(years), max(years))
+                )
+            else:
+                # Si une seule année disponible, afficher simplement l'année
+                st.info(f"**Année disponible :** {years[0]}")
+                year_range = (years[0], years[0])
             
             # Options d'affichage
             st.markdown("### ⚙️ Options d'affichage")
             show_advanced = st.checkbox("Afficher les indicateurs avancés")
-            compare_mode = st.checkbox("Mode comparatif avancé", value=True)
+            compare_mode = st.checkbox("Mode comparatif avancé", value=False)
             
             # Comparaison avec d'autres communes
             if compare_mode:
@@ -485,7 +516,7 @@ class ReunionFinancialDashboard:
             
             st.metric("Nombre de communes analysées", f"{num_communes}")
             st.metric("Population totale estimée", f"{total_population:,.0f}")
-            st.metric("Année de référence", "2017")
+            st.metric("Année de référence", f"{years[0]}")
             
             st.markdown("---")
             st.markdown("#### ℹ️ À propos")
@@ -518,7 +549,7 @@ class ReunionFinancialDashboard:
                     'Épargne Brute (M€)': last_row.get('Epargne_Brute', 0),
                     'Dette Estimée (M€)': last_row.get('Dette_Totale', 0),
                     'Capacité Remb.': last_row.get('Capacite_Remboursement', 0),
-                    'Couleur': config.get('couleur', '#666666')
+                    'Intercommunalité': config.get('intercommunalite', 'Inconnue')
                 })
         
         if overview_data:
@@ -526,14 +557,9 @@ class ReunionFinancialDashboard:
             
             # Tableau interactif
             st.dataframe(
-                overview_df.style.format({
-                    'Population': '{:,.0f}',
-                    'Recettes (M€)': '{:.1f}',
-                    'Épargne Brute (M€)': '{:.2f}',
-                    'Dette Estimée (M€)': '{:.1f}',
-                    'Capacité Remb.': '{:.2f}'
-                }).apply(lambda x: ['background-color: ' + x['Couleur'] + '; color: white' 
-                                  if col == 'Commune' else '' for col in x.index], axis=1),
+                overview_df[['Commune', 'Région', 'Type', 'Population', 
+                           'Recettes (M€)', 'Épargne Brute (M€)', 
+                           'Dette Estimée (M€)', 'Capacité Remb.', 'Intercommunalité']].round(2),
                 use_container_width=True,
                 height=600,
                 column_config={
@@ -544,7 +570,8 @@ class ReunionFinancialDashboard:
                     "Recettes (M€)": st.column_config.NumberColumn("Recettes", format="%.1f"),
                     "Épargne Brute (M€)": st.column_config.NumberColumn("Épargne", format="%.2f"),
                     "Dette Estimée (M€)": st.column_config.NumberColumn("Dette", format="%.1f"),
-                    "Capacité Remb.": st.column_config.NumberColumn("Capacité", format="%.2f")
+                    "Capacité Remb.": st.column_config.NumberColumn("Capacité", format="%.2f"),
+                    "Intercommunalité": st.column_config.TextColumn("Intercommunalité", width="large")
                 }
             )
             
@@ -592,21 +619,25 @@ class ReunionFinancialDashboard:
         with col1:
             st.markdown("#### 📍 Caractéristiques")
             st.markdown(f"**Région:** {config.get('region', 'Inconnue')}")
-            st.markdown(f"**Type:** {config.get('type', 'urbaine')}")
+            st.markdown(f"**Type:** {config.get('type', 'urbaine').title()}")
             st.markdown(f"**Spécialités:** {', '.join(config.get('specialites', []))}")
-            st.markdown(f"**Population 2017:** {last_row.get('Population', 0):,.0f} hab")
+            st.markdown(f"**Population:** {last_row.get('Population', 0):,.0f} hab")
+            st.markdown(f"**Intercommunalité:** {config.get('intercommunalite', 'Inconnue')}")
         
         with col2:
-            st.markdown("#### 💰 Situation financière 2017")
-            st.metric("Recettes totales", f"{last_row.get('Recettes_Totales', 0):.1f} M€")
+            st.markdown("#### 💰 Situation financière")
+            year = int(last_row.get('Annee', 2017))
+            st.metric(f"Recettes totales ({year})", f"{last_row.get('Recettes_Totales', 0):.1f} M€")
             st.metric("Épargne brute", f"{last_row.get('Epargne_Brute', 0):.2f} M€")
             st.metric("Impôts locaux", f"{last_row.get('Impots_Locaux', 0):.1f} M€")
+            st.metric("Capacité/Besoin financement", f"{last_row.get('Capacite_Financement', 0):.2f} M€")
         
         with col3:
             st.markdown("#### 📈 Capacité financière")
             st.metric("Dette estimée", f"{last_row.get('Dette_Totale', 0):.1f} M€")
-            st.metric("Capacité remboursement", f"{last_row.get('Capacite_Remboursement', 0):.2f}")
+            st.metric("Capacité de remboursement", f"{last_row.get('Capacite_Remboursement', 0):.2f}")
             st.metric("Ratio dette/recettes", f"{last_row.get('Ratio_Endettement_Recettes', 0):.2f}")
+            st.metric("Taux d'endettement", f"{last_row.get('Taux_Endettement', 0)*100:.1f}%")
         
         # Alertes de situation
         self._display_alerts(last_row)
@@ -616,18 +647,19 @@ class ReunionFinancialDashboard:
         capacity = data.get('Capacite_Remboursement', 1.0)
         debt_ratio = data.get('Ratio_Endettement_Recettes', 1.0)
         epargne = data.get('Epargne_Brute', 0)
+        financement = data.get('Capacite_Financement', 0)
         
         col1, col2 = st.columns(2)
         
         with col1:
-            if epargne < 0:
-                st.error("⚠️ **Épargne brute négative**")
-                st.markdown("La commune présente un déficit d'épargne.")
+            if financement < 0:
+                st.error("⚠️ **Besoin de financement**")
+                st.markdown("La commune présente un besoin de financement.")
             elif epargne < data.get('Recettes_Totales', 0) * 0.05:
                 st.warning("📊 **Épargne brute faible**")
                 st.markdown("L'épargne brute représente moins de 5% des recettes.")
             else:
-                st.success("✅ **Épargne brute positive**")
+                st.success("✅ **Situation financière stable**")
                 st.markdown(f"Épargne brute: {epargne:.2f} M€")
         
         with col2:
@@ -656,40 +688,39 @@ class ReunionFinancialDashboard:
             return
         
         # Afficher un aperçu des données
-        st.dataframe(
-            commune_data[['Exercice', 'Type de budget', 'Libellé Budget', 
+        st.markdown(f"#### Données disponibles pour {commune_name}")
+        
+        # Sélection des colonnes à afficher
+        display_columns = ['Exercice', 'Type de budget', 'Libellé Budget', 
                          'Agrégat', 'Montant', 'Population totale', 
-                         'Montant en € par habitant']].head(20),
+                         'Montant en € par habitant']
+        
+        # Filtrer les colonnes existantes
+        available_columns = [col for col in display_columns if col in commune_data.columns]
+        
+        st.dataframe(
+            commune_data[available_columns].head(20),
             use_container_width=True,
-            height=400,
-            column_config={
-                "Exercice": "Année",
-                "Type de budget": "Type",
-                "Libellé Budget": "Libellé",
-                "Agrégat": "Agrégat",
-                "Montant": st.column_config.NumberColumn("Montant (€)", format="%.0f"),
-                "Population totale": "Population",
-                "Montant en € par habitant": st.column_config.NumberColumn("€/hab", format="%.2f")
-            }
+            height=400
         )
         
         # Statistiques des agrégats
         st.markdown("#### 📊 Analyse par agrégat")
         
-        # Regrouper par agrégat
-        agregat_stats = commune_data.groupby('Agrégat').agg({
-            'Montant': ['sum', 'mean', 'count'],
-            'Montant en € par habitant': 'mean'
-        }).round(2)
-        
-        st.dataframe(agregat_stats, use_container_width=True)
+        if 'Agrégat' in commune_data.columns:
+            # Regrouper par agrégat
+            agregat_stats = commune_data.groupby('Agrégat').agg({
+                'Montant': ['sum', 'mean', 'count']
+            }).round(2)
+            
+            st.dataframe(agregat_stats, use_container_width=True)
     
     def create_comparative_analysis(self, communes_to_compare):
         """Crée l'analyse comparative entre communes"""
         st.markdown("### 📊 Analyse comparative entre communes")
         
-        if len(communes_to_compare) == 0:
-            st.info("👈 Sélectionnez des communes à comparer dans la sidebar")
+        if len(communes_to_compare) < 2:
+            st.info("👈 Sélectionnez au moins 2 communes à comparer dans la sidebar")
             return
         
         all_communes = communes_to_compare
@@ -707,12 +738,13 @@ class ReunionFinancialDashboard:
                     'Type': config.get('type', 'urbaine'),
                     'Population': last_row.get('Population', 0),
                     'Recettes (M€)': last_row.get('Recettes_Totales', 0),
+                    'Recettes/Habitant (€)': (last_row.get('Recettes_Totales', 0) * 1000000) / last_row.get('Population', 1),
                     'Épargne (M€)': last_row.get('Epargne_Brute', 0),
                     'Dette (M€)': last_row.get('Dette_Totale', 0),
                     'Dette/Habitant (k€)': (last_row.get('Dette_Totale', 0) * 1000) / last_row.get('Population', 1),
                     'Capacité Remb.': last_row.get('Capacite_Remboursement', 0),
                     'Ratio D/R': last_row.get('Ratio_Endettement_Recettes', 0),
-                    'Couleur': config.get('couleur', '#666666')
+                    'Taux Endettement (%)': last_row.get('Taux_Endettement', 0) * 100
                 })
         
         if comparison_data:
@@ -723,7 +755,8 @@ class ReunionFinancialDashboard:
             
             metrics_to_compare = st.multiselect(
                 "Sélectionnez les indicateurs à comparer:",
-                ['Recettes (M€)', 'Épargne (M€)', 'Dette (M€)', 'Dette/Habitant (k€)', 'Capacité Remb.', 'Ratio D/R'],
+                ['Recettes (M€)', 'Épargne (M€)', 'Dette (M€)', 'Dette/Habitant (k€)', 
+                 'Capacité Remb.', 'Ratio D/R', 'Taux Endettement (%)'],
                 default=['Recettes (M€)', 'Dette (M€)', 'Capacité Remb.']
             )
             
@@ -737,7 +770,9 @@ class ReunionFinancialDashboard:
                         x=comparison_df['Commune'],
                         y=comparison_df[metric],
                         name=metric,
-                        marker_color=colors[i % len(colors)]
+                        marker_color=colors[i % len(colors)],
+                        text=comparison_df[metric].round(2),
+                        textposition='auto'
                     ))
                 
                 fig.update_layout(
@@ -745,7 +780,8 @@ class ReunionFinancialDashboard:
                     xaxis_title='Commune',
                     yaxis_title='Valeur',
                     barmode='group',
-                    height=500
+                    height=500,
+                    showlegend=True
                 )
                 
                 st.plotly_chart(fig, use_container_width=True)
@@ -762,11 +798,13 @@ class ReunionFinancialDashboard:
                     "Type": "Type",
                     "Population": st.column_config.NumberColumn("Population", format="%d"),
                     "Recettes (M€)": st.column_config.NumberColumn("Recettes", format="%.1f"),
+                    "Recettes/Habitant (€)": st.column_config.NumberColumn("Recettes/hab", format="%.0f"),
                     "Épargne (M€)": st.column_config.NumberColumn("Épargne", format="%.2f"),
                     "Dette (M€)": st.column_config.NumberColumn("Dette", format="%.1f"),
                     "Dette/Habitant (k€)": st.column_config.NumberColumn("Dette/hab", format="%.1f"),
                     "Capacité Remb.": st.column_config.NumberColumn("Capacité", format="%.2f"),
-                    "Ratio D/R": st.column_config.NumberColumn("Ratio D/R", format="%.2f")
+                    "Ratio D/R": st.column_config.NumberColumn("Ratio D/R", format="%.2f"),
+                    "Taux Endettement (%)": st.column_config.NumberColumn("Taux Endett.", format="%.1f")
                 }
             )
         else:
@@ -792,7 +830,8 @@ class ReunionFinancialDashboard:
                     'Dette_par_Habitant': (last_row.get('Dette_Totale', 0) * 1000000) / last_row.get('Population', 1),
                     'Capacite_Remboursement': last_row.get('Capacite_Remboursement', 0),
                     'Ratio_Dette_Recettes': last_row.get('Ratio_Endettement_Recettes', 0),
-                    'Epargne_Brute_par_Habitant': (last_row.get('Epargne_Brute', 0) * 1000000) / last_row.get('Population', 1)
+                    'Epargne_Brute_par_Habitant': (last_row.get('Epargne_Brute', 0) * 1000000) / last_row.get('Population', 1),
+                    'Taux_Endettement': last_row.get('Taux_Endettement', 0) * 100
                 })
         
         if ranking_data:
@@ -805,19 +844,20 @@ class ReunionFinancialDashboard:
                 ranking_metric = st.selectbox(
                     "Classer par:",
                     ['Recettes_par_Habitant', 'Dette_par_Habitant', 'Capacite_Remboursement', 
-                     'Ratio_Dette_Recettes', 'Epargne_Brute_par_Habitant'],
+                     'Ratio_Dette_Recettes', 'Epargne_Brute_par_Habitant', 'Taux_Endettement'],
                     format_func=lambda x: {
                         'Recettes_par_Habitant': 'Recettes par habitant',
                         'Dette_par_Habitant': 'Dette par habitant',
                         'Capacite_Remboursement': 'Capacité de remboursement',
                         'Ratio_Dette_Recettes': 'Ratio dette/recettes',
-                        'Epargne_Brute_par_Habitant': 'Épargne brute par habitant'
+                        'Epargne_Brute_par_Habitant': 'Épargne brute par habitant',
+                        'Taux_Endettement': 'Taux d\'endettement (%)'
                     }[x]
                 )
             
             with col2:
                 ascending = st.checkbox("Ordre croissant", 
-                                      value=(ranking_metric in ['Dette_par_Habitant', 'Ratio_Dette_Recettes']))
+                                      value=(ranking_metric in ['Dette_par_Habitant', 'Ratio_Dette_Recettes', 'Taux_Endettement']))
             
             # Classement
             sorted_df = ranking_df.sort_values(by=ranking_metric, ascending=ascending)
@@ -825,15 +865,15 @@ class ReunionFinancialDashboard:
             
             # Affichage du classement
             st.dataframe(
-                sorted_df[['Rang', 'Commune', 'Région', ranking_metric]].head(10),
+                sorted_df[['Rang', 'Commune', 'Région', ranking_metric]].head(15),
                 use_container_width=True,
                 column_config={
-                    "Rang": "Rang",
+                    "Rang": st.column_config.NumberColumn("Rang", format="%d"),
                     "Commune": "Commune",
                     "Région": "Région",
                     ranking_metric: st.column_config.NumberColumn(
                         "Valeur",
-                        format="%.0f" if 'Habitant' in ranking_metric else "%.2f"
+                        format="%.0f" if 'Habitant' in ranking_metric or ranking_metric == 'Taux_Endettement' else "%.2f"
                     )
                 }
             )
@@ -844,7 +884,7 @@ class ReunionFinancialDashboard:
                         y='Commune',
                         orientation='h',
                         color='Région',
-                        title=f'Top 10 - {ranking_metric.replace("_", " ").title()}',
+                        title=f'Top 10 - Classement par {ranking_metric.replace("_", " ").title()}',
                         color_discrete_sequence=px.colors.qualitative.Set3)
             
             st.plotly_chart(fig, use_container_width=True)
@@ -863,12 +903,13 @@ class ReunionFinancialDashboard:
         epargne = last_data.get('Epargne_Brute', 0)
         debt_ratio = last_data.get('Ratio_Endettement_Recettes', 0)
         capacity = last_data.get('Capacite_Remboursement', 0)
+        financement = last_data.get('Capacite_Financement', 0)
         
         # Recommandations spécifiques
         tabs = st.tabs(["Priorités", "Investissements", "Gouvernance"])
         
         with tabs[0]:
-            if epargne < 0:
+            if financement < 0:
                 st.error("**Actions prioritaires immédiates:**")
                 st.markdown("""
                 1. **Rééquilibrage budgétaire urgent**
@@ -886,6 +927,19 @@ class ReunionFinancialDashboard:
                    - Rationalisation des achats publics
                    - Optimisation de la masse salariale
                 """)
+            elif capacity < 1.2:
+                st.warning("**Actions de vigilance requises:**")
+                st.markdown("""
+                1. **Renforcement de la capacité d'épargne**
+                   - Contrôle strict des dépenses
+                   - Augmentation des recettes propres
+                   - Optimisation de la gestion
+                
+                2. **Gestion de la dette**
+                   - Renégociation des emprunts
+                   - Plan de désendettement
+                   - Limitation des nouveaux emprunts
+                """)
             else:
                 st.success("**Actions d'optimisation et de développement:**")
                 st.markdown("""
@@ -898,20 +952,16 @@ class ReunionFinancialDashboard:
                    - Projets à fort retour sur investissement
                    - Infrastructures durables et sobres
                    - Numérisation des services publics
-                
-                3. **Préparation aux risques**
-                   - Plans de continuité d'activité
-                   - Stress tests financiers réguliers
-                   - Assurance des risques majeurs
                 """)
         
         with tabs[1]:
             st.markdown("**Orientation des investissements:**")
+            specialties = config.get('specialites', ['services publics'])
             st.markdown(f"""
-            Compte tenu des spécialités de {config.get('specialites', ['services publics'])}:
+            Compte tenu des spécialités de la commune ({', '.join(specialties)}):
             
             **Investissements prioritaires:**
-            - **{config.get('specialites', [''])[0] if config.get('specialites') else 'Infrastructures'}**: 
+            - **{specialties[0] if specialties else 'Infrastructures'}**: 
               Modernisation et développement
             - **Transition écologique**: Adaptation au changement climatique
             - **Services publics**: Amélioration de la qualité de service
@@ -980,30 +1030,31 @@ class ReunionFinancialDashboard:
             
             with col1:
                 st.metric("Nombre total de lignes", f"{len(self.data):,}")
-                st.metric("Communes différentes", f"{len(self.communes_config)}")
+                st.metric("Communes réunionnaises", f"{len(self.communes_config)}")
             
             with col2:
-                st.metric("Années disponibles", "2017")
+                years = self.get_years_available()
+                st.metric("Années disponibles", f"{len(years)}")
                 st.metric("Agrégats financiers", f"{self.data['Agrégat'].nunique()}")
             
             with col3:
                 st.metric("Types de budget", f"{self.data['Type de budget'].nunique()}")
-                st.metric("Régions", f"{self.data['Nom 2024 Région'].nunique()}")
+                st.metric("EPCI (intercommunalités)", f"{self.data['Nom 2024 EPCI'].nunique()}")
         
         with tab2:
             # Analyse de la commune sélectionnée
             if selected_commune in filtered_communes:
                 df, config = self.prepare_commune_financial_data(selected_commune)
                 
-                self.create_summary_metrics(df, config, selected_commune)
-                
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    # Graphique des indicateurs financiers
-                    st.markdown("#### 📊 Indicateurs financiers 2017")
+                if not df.empty:
+                    self.create_summary_metrics(df, config, selected_commune)
                     
-                    if not df.empty:
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        # Graphique des indicateurs financiers
+                        st.markdown("#### 📊 Indicateurs financiers principaux")
+                        
                         indicators = ['Recettes_Totales', 'Epargne_Brute', 'Impots_Locaux', 'Dette_Totale']
                         indicator_names = ['Recettes', 'Épargne brute', 'Impôts locaux', 'Dette estimée']
                         
@@ -1012,7 +1063,9 @@ class ReunionFinancialDashboard:
                         fig = go.Figure(data=[go.Bar(
                             x=indicator_names,
                             y=indicator_values,
-                            marker_color=[config.get('couleur', '#666666'), '#2A9D8F', '#E76F51', '#F9A602']
+                            marker_color=[config.get('couleur', '#666666'), '#2A9D8F', '#E76F51', '#F9A602'],
+                            text=[f'{v:.1f}' for v in indicator_values],
+                            textposition='auto'
                         )])
                         
                         fig.update_layout(
@@ -1022,20 +1075,25 @@ class ReunionFinancialDashboard:
                         )
                         
                         st.plotly_chart(fig, use_container_width=True)
-                
-                with col2:
-                    # Graphique des ratios
-                    st.markdown("#### ⚖️ Ratios financiers")
                     
-                    if not df.empty:
-                        ratios = ['Capacite_Remboursement', 'Ratio_Endettement_Recettes']
-                        ratio_names = ['Capacité remboursement', 'Ratio dette/recettes']
-                        ratio_values = [df[col].iloc[-1] for col in ratios]
+                    with col2:
+                        # Graphique des ratios
+                        st.markdown("#### ⚖️ Ratios financiers")
+                        
+                        ratios = ['Capacite_Remboursement', 'Ratio_Endettement_Recettes', 'Taux_Endettement']
+                        ratio_names = ['Capacité remboursement', 'Ratio dette/recettes', 'Taux endettement']
+                        ratio_values = [
+                            df['Capacite_Remboursement'].iloc[-1],
+                            df['Ratio_Endettement_Recettes'].iloc[-1],
+                            df['Taux_Endettement'].iloc[-1] * 100
+                        ]
                         
                         fig = go.Figure(data=[go.Bar(
                             x=ratio_names,
                             y=ratio_values,
-                            marker_color=['#4ECDC4', '#FF6B6B']
+                            marker_color=['#4ECDC4', '#FF6B6B', '#F9A602'],
+                            text=[f'{v:.2f}' if i < 2 else f'{v:.1f}%' for i, v in enumerate(ratio_values)],
+                            textposition='auto'
                         )])
                         
                         # Ajouter des lignes de référence
@@ -1049,73 +1107,20 @@ class ReunionFinancialDashboard:
                         )
                         
                         st.plotly_chart(fig, use_container_width=True)
-                
-                # Données originales
-                self.create_original_data_view(selected_commune)
+                    
+                    # Données originales
+                    self.create_original_data_view(selected_commune)
+                else:
+                    st.warning(f"Aucune donnée financière disponible pour {selected_commune}")
             else:
                 st.warning("La commune sélectionnée ne correspond pas aux filtres actuels.")
         
         with tab3:
             # Comparaisons
-            if compare_communes:
+            if compare_communes and len(compare_communes) >= 1:
                 self.create_comparative_analysis([selected_commune] + compare_communes)
             else:
-                st.info("👈 Sélectionnez des communes à comparer dans la sidebar")
-                
-                # Comparaison avec les moyennes régionales
-                st.markdown("### 📊 Positionnement régional")
-                
-                region_of_selected = self.communes_config.get(selected_commune, {}).get('region', 'Inconnue')
-                communes_in_region = [c for c, config in self.communes_config.items() 
-                                    if config.get('region') == region_of_selected]
-                
-                if communes_in_region and len(communes_in_region) > 1:
-                    region_data = []
-                    
-                    for commune in communes_in_region:
-                        df, config = self.prepare_commune_financial_data(commune)
-                        
-                        if not df.empty:
-                            last_row = df.iloc[-1]
-                            region_data.append({
-                                'Commune': commune,
-                                'Recettes (M€)': last_row.get('Recettes_Totales', 0),
-                                'Épargne (M€)': last_row.get('Epargne_Brute', 0),
-                                'Dette (M€)': last_row.get('Dette_Totale', 0)
-                            })
-                    
-                    if region_data:
-                        region_df = pd.DataFrame(region_data)
-                        
-                        # Calculer la position de la commune sélectionnée
-                        selected_recettes = region_df[region_df['Commune'] == selected_commune]['Recettes (M€)'].values[0]
-                        avg_recettes = region_df['Recettes (M€)'].mean()
-                        
-                        col1, col2, col3 = st.columns(3)
-                        
-                        with col1:
-                            st.metric("Position dans la région", 
-                                     f"{selected_recettes/avg_recettes*100:.0f}% de la moyenne" 
-                                     if avg_recettes > 0 else "N/A")
-                        
-                        with col2:
-                            st.metric("Moyenne régionale recettes", f"{avg_recettes:.1f} M€")
-                        
-                        with col3:
-                            st.metric("Nombre de communes", len(communes_in_region))
-                        
-                        # Graphique comparatif
-                        fig = px.bar(region_df, x='Commune', y='Recettes (M€)',
-                                    title=f'Recettes par commune - Région {region_of_selected}',
-                                    color='Commune',
-                                    color_discrete_map={selected_commune: self.communes_config.get(selected_commune, {}).get('couleur', '#666666')})
-                        
-                        # Ajouter la ligne de moyenne
-                        fig.add_hline(y=avg_recettes, line_dash="dash", line_color="red",
-                                     annotation_text="Moyenne régionale",
-                                     annotation_position="top right")
-                        
-                        st.plotly_chart(fig, use_container_width=True)
+                st.info("👈 Activez le 'Mode comparatif avancé' et sélectionnez des communes à comparer dans la sidebar")
         
         with tab4:
             # Classements
@@ -1125,58 +1130,22 @@ class ReunionFinancialDashboard:
             # Recommandations
             if selected_commune in filtered_communes:
                 df, config = self.prepare_commune_financial_data(selected_commune)
-                self.create_recommandations(df, config)
+                if not df.empty:
+                    self.create_recommandations(df, config)
+                else:
+                    st.info(f"Aucune donnée disponible pour les recommandations pour {selected_commune}")
             else:
                 st.info("Sélectionnez une commune pour voir les recommandations spécifiques.")
-            
-            # Recommandations générales pour toutes les communes
-            st.markdown("---")
-            st.markdown("### 🌟 Bonnes pratiques pour toutes les communes")
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown("**📊 Transparence financière**")
-                st.markdown("""
-                - Publication régulière des comptes administratifs
-                - Indicateurs de performance accessibles au public
-                - Rapports annuels de gestion détaillés
-                - Portail open data financier
-                """)
-                
-                st.markdown("**🤝 Coopération intercommunale**")
-                st.markdown("""
-                - Mutualisation des services et équipements
-                - Achats groupés pour optimiser les coûts
-                - Partage d'expertise et de bonnes pratiques
-                - Projets communs de développement territorial
-                """)
-            
-            with col2:
-                st.markdown("**🌿 Développement durable**")
-                st.markdown("""
-                - Intégration du développement durable dans le budget
-                - Investissements dans la transition écologique
-                - Adaptation au changement climatique
-                - Promotion de l'économie circulaire locale
-                """)
-                
-                st.markdown("**💼 Attractivité économique**")
-                st.markdown("""
-                - Soutien aux entreprises et commerces locaux
-                - Développement touristique durable
-                - Infrastructures numériques performantes
-                - Formation professionnelle adaptée aux besoins locaux
-                """)
         
         # Pied de page
         st.markdown("---")
-        col1, col2, col3 = st.columns(3)
-        with col2:
-            st.markdown("""
-            **Dashboard d'analyse financière des communes de La Réunion**  
-            *Basé sur les données OFGL 2017 - Version adaptée aux données réelles*
-            """)
+        st.markdown("""
+        **Dashboard d'analyse financière des communes de La Réunion**  
+        *Basé sur les données OFGL 2017 - Version adaptée aux données réelles*
+        
+        ℹ️ **Note:** Certains indicateurs (dette, ratios) sont estimés à partir des données disponibles.
+        Les recommandations sont basées sur l'analyse des agrégats financiers présents dans le jeu de données.
+        """)
 
 # Exécution du dashboard
 if __name__ == "__main__":
@@ -1187,7 +1156,12 @@ if __name__ == "__main__":
     import os
     if not os.path.exists(csv_path):
         st.error(f"Fichier CSV introuvable: {csv_path}")
-        st.info("Veuillez vous assurer que le fichier 'ofgl-base-communes.csv' est dans le même répertoire que ce script.")
+        st.info("""
+        Veuillez vous assurer que :
+        1. Le fichier 'ofgl-base-communes.csv' est dans le même répertoire que ce script
+        2. Le fichier contient les données des communes de La Réunion
+        3. Le fichier est au format CSV avec le séparateur ';'
+        """)
     else:
         dashboard = ReunionFinancialDashboard(csv_path)
         dashboard.run_dashboard()
